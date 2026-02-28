@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Global System Users (Staff, Admins)
+model User {
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
+  name            String
+  role            Role     @default(OPERATOR)
+  password        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  maintenanceLogs     Maintenance[]
+  vehicleMovements    VehicleMovement[]
+  inventoryMovements InventoryMovement[]
+}
+
+model Cedis {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  client      String?  // Cliente asociado al CEDIS
+  location    String?
+  
+  // Vehicles currently at this CEDIS
+  currentVehicles    Vehicle[] @relation("VehicleLocation")
+  
+  // Current Stock
+  inventoryStock     InventoryStock[]
+  
+  // Movements related to this CEDIS
+  vehicleArrivals    VehicleMovement[] @relation("ToCedis")
+  vehicleDepartures  VehicleMovement[] @relation("FromCedis")
+  
+  inventoryMovements InventoryMovement[]
+  providers          Provider[]
+}
+
+model Vehicle {
+  id              Int      @id @default(autoincrement())
+  plate           String   @unique
+  truckNumber     String   @unique
+  status          VehicleStatus @default(ACTIVE)
+  
+  // Technical Specs
+  engine          String?
+  yearModel       Int?
+  transmission    String?
+  fuelType        String?
+  vin             String?  @unique
+  
+  // Current Location
+  currentCedisId  Int?
+  currentCedis    Cedis?   @relation("VehicleLocation", fields: [currentCedisId], references: [id])
+  
+  // Document Management
+  documents       VehicleDocument[]
+  
+  // Maintenance & Repairs
+  maintenanceLogs Maintenance[]
+  tireRotations   TireRotation[]
+  partExchanges   PartExchange[]
+  
+  // Movement History
+  movementHistory VehicleMovement[]
+}
+
+model VehicleMovement {
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  
+  fromCedisId Int?
+  fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
+  
+  toCedisId   Int
+  toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
+  
+  date        DateTime @default(now())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  reason      String?
+}
+
+model DocumentType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  alertDays   Int?
+  
+  documents   VehicleDocument[]
+}
+
+model VehicleDocument {
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  
+  typeId      Int
+  type        DocumentType @relation(fields: [typeId], references: [id])
+  
+  issueDate   DateTime
+  expiryDate  DateTime
+  status      DocumentStatus @default(PENDING)
+  
+  evidence    VehicleDocumentEvidence[]
+}
+
+model VehicleDocumentEvidence {
+  id          Int      @id @default(autoincrement())
+  documentId  Int
+  document    VehicleDocument @relation(fields: [documentId], references: [id])
+  url         String
+  createdAt   DateTime @default(now())
+}
+
+model Maintenance {
+  id              Int      @id @default(autoincrement())
+  vehicleId       Int
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+  
+  type            MaintenanceType
+  description     String
+  date            DateTime @default(now())
+  
+  userId          Int?
+  user            User?    @relation(fields: [userId], references: [id])
+  
+  providerId      Int?
+  provider        Provider? @relation(fields: [providerId], references: [id])
+  
+  tickets         MaintenanceTicket[]
+  parts           MaintenancePart[]
+  
+  status          MaintenanceStatus @default(SCHEDULED)
+  
+  evidence        MaintenanceEvidence[]
+}
+
+model MaintenanceTicket {
+  id              Int      @id @default(autoincrement())
+  maintenanceId   Int
+  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
+  ticketNumber    String
+  cost            Decimal
+  date            DateTime @default(now())
+}
+
+model MaintenancePart {
+  id              Int      @id @default(autoincrement())
+  maintenanceId   Int
+  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
+  productId       Int     
+  product         Product  @relation(fields: [productId], references: [id])
+  quantity        Int      @default(1)
+  unitCost        Decimal? 
+}
+
+model MaintenanceEvidence {
+  id              Int      @id @default(autoincrement())
+  maintenanceId   Int
+  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
+  url             String
+  createdAt       DateTime @default(now())
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+}
+
+model Provider {
+  id          Int      @id @default(autoincrement())
+  name        String
+  contact     String?
+  services    String?
+  
+  cedisId     Int?
+  cedis       Cedis?    @relation(fields: [cedisId], references: [id])
+  
+  maintenances Maintenance[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique
+  description String?
+  category    String
+  
+  stock            InventoryStock[]
+  movements        InventoryMovement[]
+  maintenanceParts MaintenancePart[]
+  partExchanges    PartExchange[]
+}
+
+model InventoryStock {
+  id          Int      @id @default(autoincrement())
+  cedisId     Int
+  cedis       Cedis    @relation(fields: [cedisId], references: [id])
+  
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  
+  quantity    Int      @default(0)
+  
+  @@unique([cedisId, productId])
+}
+
+model InventoryMovement {
+  id          Int      @id @default(autoincrement())
+  cedisId     Int
+  cedis       Cedis    @relation(fields: [cedisId], references: [id])
+  
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  
+  type        InventoryStartType
+  quantity    Int
+  unitPrice   Decimal?
+  totalCost   Decimal?
+  
+  date        DateTime @default(now())
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  notes       String?
+  evidence    InventoryMovementEvidence[]
+}
+
+model InventoryMovementEvidence {
+  id          Int      @id @default(autoincrement())
+  movementId  Int
+  movement    InventoryMovement @relation(fields: [movementId], references: [id])
+  url         String
+  createdAt   DateTime @default(now())
+}
+
+enum InventoryStartType {
+  PURCHASE
+  TRANSFER_IN
+  TRANSFER_OUT
+  USAGE
+  LOSS
+  ADJUSTMENT
+}
+
+model TireRotation {
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  date        DateTime @default(now())
+  description String
+  mileage     Int?
+  positionMap Json?
+}
+
+model PartExchange {
+  id              Int      @id @default(autoincrement())
+  vehicleId       Int
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
+  action          String
+  quantity        Int      @default(1)
+  date            DateTime @default(now())
+  description     String
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+enum VehicleStatus {
+  ACTIVE
+  MAINTENANCE
+  IN_TRANSIT
+}
+
+enum DocumentStatus {
+  VALID
+  EXPIRED
+  PENDING
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
