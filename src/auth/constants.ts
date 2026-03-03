@@ -1,4 +1,8 @@
 export const jwtConstants = {
-    // DO NOT USE THIS VALUE IN PRODUCTION! Use an environment variable.
-    secret: process.env.JWT_SECRET || 'SECRET_KEY_FOR_LOCAL_YARDTRUCK_APP_2024',
+    secret: process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? undefined : 'dev_secret_key_yardtruck'),
 };
+
+if (process.env.NODE_ENV === 'production' && !jwtConstants.secret) {
+    throw new Error('JWT_SECRET must be defined in production environment');
+}
+

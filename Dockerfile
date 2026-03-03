@@ -15,13 +15,14 @@ FROM deps AS builder
 COPY . .
 RUN npx prisma generate
 RUN npm run build
-# Eliminamos dependencias de desarrollo para mantener la imagen de producción ligera
-RUN npm prune --production
+# NOTA: No hacemos prune aquí para mantener el CLI de prisma disponible
+# Si el tamaño es crítico, se podría mover prisma a dependencies en package.json
 
 # 4. Runner stage - Imagen final para producción
 FROM base AS runner
 ENV NODE_ENV=production
-ENV PORT=3001
+# Dejamos que Cloud Run defina el PORT (default 8080)
+ENV PORT=8080
 
 # Crear usuario no root para seguridad
 RUN addgroup --system --gid 1001 nodejs
@@ -38,9 +39,11 @@ RUN chown -R nestjs:nodejs /app
 
 USER nestjs
 
-EXPOSE 3001
+# Cloud Run escucha por defecto en el 8080
+EXPOSE 8080
 
 # Script para ejecutar migraciones y arrancar la aplicación
-# Usamos deploy para aplicar migraciones pendientes sin resetear la DB
+# npx prisma migrate deploy requiere que 'prisma' esté en node_modules
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+
 
