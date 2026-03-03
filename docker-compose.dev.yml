@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      target: builder # Usamos builder para tener herramientas de desarrollo
+    command: npm run start:dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/yardtruck?schema=public
+      - NODE_ENV=development
+    depends_on:
+      - postgres
+
+  postgres:
+    # Reutilizamos la configuración del compose principal si se ejecutan juntos
+    # O la definimos aquí para ser explícitos
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: yardtruck
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

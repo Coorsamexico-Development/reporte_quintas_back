@@ -1,39 +1,46 @@
-# Etapa de construcción
-FROM node:20-alpine AS builder
-
+# 1. Base stage - Instalación de dependencias básicas
+FROM node:20-alpine AS base
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 
-# Instalar dependencias
+# 2. Dependencies stage - Instalación de dependencias de producción y desarrollo
+FROM base AS deps
 COPY package*.json ./
+COPY prisma ./prisma/
+# Instalamos todas las dependencias para poder construir el proyecto
 RUN npm ci
 
-# Copiar el código fuente y el schema de Prisma
+# 3. Builder stage - Construcción de la aplicación
+FROM deps AS builder
 COPY . .
-
-# Generar el cliente de Prisma
 RUN npx prisma generate
-
-# Compilar la aplicación NestJS
 RUN npm run build
+# Eliminamos dependencias de desarrollo para mantener la imagen de producción ligera
+RUN npm prune --production
 
-# Etapa de producción
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-# Copiar package.json y dependencias
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-
-# Instalar npx
-# Variables de entorno por defecto (se sobreescriben en Cloud Run)
+# 4. Runner stage - Imagen final para producción
+FROM base AS runner
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Exponer el puerto
+# Crear usuario no root para seguridad
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
+
+# Copiar archivos necesarios desde las etapas anteriores
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/prisma ./prisma
+
+# Ajustar permisos
+RUN chown -R nestjs:nodejs /app
+
+USER nestjs
+
 EXPOSE 3001
 
-# Scripts de inicio (Aplica esquema y luego arranca)
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/main.js"]
+# Script para ejecutar migraciones y arrancar la aplicación
+# Usamos deploy para aplicar migraciones pendientes sin resetear la DB
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+
