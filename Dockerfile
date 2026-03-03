@@ -1,7 +1,7 @@
 # 1. Base stage - Instalación de dependencias básicas
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 
 # 2. Dependencies stage - Instalación de dependencias de producción y desarrollo
 FROM base AS deps
