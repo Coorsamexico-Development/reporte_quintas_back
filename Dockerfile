@@ -43,7 +43,11 @@ USER nestjs
 EXPOSE 8080
 
 # Script para ejecutar migraciones y arrancar la aplicación
-# npx prisma migrate deploy requiere que 'prisma' esté en node_modules
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Usamos un script de una sola línea más robusto para capturar errores
+CMD sh -c "echo '🔍 Iniciando proceso de despliegue...'; \
+           echo '📂 Aplicando migraciones de base de datos...'; \
+           npx prisma migrate deploy || { echo '❌ ERROR: Fallaron las migraciones de Prisma. Revisa la conexión a la DB.'; exit 1; }; \
+           echo '🚀 Migraciones completadas. Arrancando servidor...'; \
+           node dist/main.js"
 
 
