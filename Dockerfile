@@ -43,11 +43,13 @@ USER nestjs
 EXPOSE 8080
 
 # Script para ejecutar migraciones y arrancar la aplicación
-# Usamos un script de una sola línea más robusto para capturar errores
-CMD sh -c "echo '🔍 Iniciando proceso de despliegue...'; \
-           echo '📂 Aplicando migraciones de base de datos...'; \
-           npx prisma migrate deploy || { echo '❌ ERROR: Fallaron las migraciones de Prisma. Revisa la conexión a la DB.'; exit 1; }; \
-           echo '🚀 Migraciones completadas. Arrancando servidor...'; \
-           node dist/main.js"
+# Usamos un script más detallado para facilitar la depuración en Cloud Run
+CMD ["sh", "-c", "echo \"🔍 [$(date '+%Y-%m-%d %H:%M:%S')] Iniciando proceso de arranque en Cloud Run...\"; \
+           echo \"📡 [$(date '+%Y-%m-%d %H:%M:%S')] Verificando conexión con la base de datos...\"; \
+           if [ -z \"$DATABASE_URL\" ]; then echo \"❌ [$(date '+%Y-%m-%d %H:%M:%S')] ERROR: DATABASE_URL no está definida.\"; exit 1; fi; \
+           echo \"📂 [$(date '+%Y-%m-%d %H:%M:%S')] Aplicando migraciones de Prisma...\"; \
+           npx prisma migrate deploy || { echo \"❌ [$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Fallaron las migraciones. Revisa los logs de Cloud SQL Proxy o la red.\"; exit 1; }; \
+           echo \"🚀 [$(date '+%Y-%m-%d %H:%M:%S')] Migraciones exitosas. Iniciando servidor NestJS...\"; \
+           node dist/main.js"]
 
 
