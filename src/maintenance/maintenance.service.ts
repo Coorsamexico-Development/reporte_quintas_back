@@ -54,6 +54,12 @@ export class MaintenanceService {
                 provider: true,
                 user: true,
                 evidence: true,
+                parts: {
+                    include: {
+                        product: true
+                    }
+                },
+                tickets: true
             },
             orderBy: { date: 'desc' },
         });
