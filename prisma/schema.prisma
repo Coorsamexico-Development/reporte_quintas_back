@@ -7,293 +7,225 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Global System Users (Staff, Admins)
 model User {
-  id              Int      @id @default(autoincrement())
-  email           String   @unique
-  name            String
-  role            Role     @default(OPERATOR)
-  password        String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Relations
-  maintenanceLogs     Maintenance[]
-  vehicleMovements    VehicleMovement[]
-  inventoryMovements InventoryMovement[]
+  id               Int               @id @default(autoincrement())
+  email            String            @unique
+  name             String
+  password         String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  role             String            @default("OPERATOR")
+  maintenanceLogs  Maintenance[]
+  vehicleMovements VehicleMovement[]
 }
 
 model Cedis {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  client      String?  // Cliente asociado al CEDIS
-  location    String?
-  
-  // Vehicles currently at this CEDIS
-  currentVehicles    Vehicle[] @relation("VehicleLocation")
-  
-  // Current Stock
-  inventoryStock     InventoryStock[]
-  
-  // Movements related to this CEDIS
-  vehicleArrivals    VehicleMovement[] @relation("ToCedis")
-  vehicleDepartures  VehicleMovement[] @relation("FromCedis")
-  
-  inventoryMovements InventoryMovement[]
-  providers          Provider[]
+  id                Int               @id @default(autoincrement())
+  name              String            @unique
+  client            String?
+  location          String?
+  latitude          Float?
+  longitude         Float?
+  providers         Provider[]
+  currentVehicles   Vehicle[]         @relation("VehicleLocation")
+  vehicleDepartures VehicleMovement[] @relation("FromCedis")
+  vehicleArrivals   VehicleMovement[] @relation("ToCedis")
 }
 
 model Vehicle {
-  id              Int      @id @default(autoincrement())
-  plate           String   @unique
-  truckNumber     String   @unique
-  status          VehicleStatus @default(ACTIVE)
-  
-  // Technical Specs
+  id              Int               @id @default(autoincrement())
+  plate           String            @unique
+  truckNumber     String            @unique
   engine          String?
   yearModel       Int?
   transmission    String?
   fuelType        String?
-  vin             String?  @unique
-  
-  // Current Location
+  vin             String?           @unique
   currentCedisId  Int?
-  currentCedis    Cedis?   @relation("VehicleLocation", fields: [currentCedisId], references: [id])
-  
-  // Document Management
-  documents       VehicleDocument[]
-  
-  // Maintenance & Repairs
+  status          String            @default("ACTIVE")
+  fuelTypeId      Int?
+  transmissionId  Int?
+  yearModelId     Int?
+  faults          Fault[]
   maintenanceLogs Maintenance[]
-  tireRotations   TireRotation[]
   partExchanges   PartExchange[]
-  
-  // Movement History
+  tireRotations   TireRotation[]
+  currentCedis    Cedis?            @relation("VehicleLocation", fields: [currentCedisId], references: [id])
+  fuelTypeRel     FuelType?         @relation(fields: [fuelTypeId], references: [id])
+  transmissionRel Transmission?     @relation(fields: [transmissionId], references: [id])
+  yearModelRel    ModelYear?        @relation(fields: [yearModelId], references: [id])
+  documents       VehicleDocument[]
   movementHistory VehicleMovement[]
+}
+
+model Transmission {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  vehicles Vehicle[]
+}
+
+model FuelType {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  vehicles Vehicle[]
+}
+
+model ModelYear {
+  id       Int       @id @default(autoincrement())
+  year     Int       @unique
+  vehicles Vehicle[]
 }
 
 model VehicleMovement {
   id          Int      @id @default(autoincrement())
   vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
-  
   fromCedisId Int?
-  fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
-  
   toCedisId   Int
-  toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
-  
   date        DateTime @default(now())
   userId      Int
-  user        User     @relation(fields: [userId], references: [id])
   reason      String?
+  fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
+  toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 }
 
 model DocumentType {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
   description String?
   alertDays   Int?
-  
   documents   VehicleDocument[]
 }
 
 model VehicleDocument {
-  id          Int      @id @default(autoincrement())
-  vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
-  
-  typeId      Int
-  type        DocumentType @relation(fields: [typeId], references: [id])
-  
-  issueDate   DateTime
-  expiryDate  DateTime
-  status      DocumentStatus @default(PENDING)
-  
-  evidence    VehicleDocumentEvidence[]
+  id         Int                       @id @default(autoincrement())
+  vehicleId  Int
+  typeId     Int
+  issueDate  DateTime
+  expiryDate DateTime
+  status     String                    @default("PENDING")
+  type       DocumentType              @relation(fields: [typeId], references: [id])
+  vehicle    Vehicle                   @relation(fields: [vehicleId], references: [id])
+  evidence   VehicleDocumentEvidence[]
 }
 
 model VehicleDocumentEvidence {
-  id          Int      @id @default(autoincrement())
-  documentId  Int
-  document    VehicleDocument @relation(fields: [documentId], references: [id])
-  url         String
-  createdAt   DateTime @default(now())
+  id         Int             @id @default(autoincrement())
+  documentId Int
+  url        String
+  createdAt  DateTime        @default(now())
+  document   VehicleDocument @relation(fields: [documentId], references: [id])
 }
 
 model Maintenance {
-  id              Int      @id @default(autoincrement())
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
-  
-  type            MaintenanceType
-  description     String
-  date            DateTime @default(now())
-  
-  userId          Int?
-  user            User?    @relation(fields: [userId], references: [id])
-  
-  providerId      Int?
-  provider        Provider? @relation(fields: [providerId], references: [id])
-  
-  tickets         MaintenanceTicket[]
-  parts           MaintenancePart[]
-  
-  status          MaintenanceStatus @default(SCHEDULED)
-  
-  evidence        MaintenanceEvidence[]
+  id             Int                   @id @default(autoincrement())
+  vehicleId      Int
+  description    String
+  date           DateTime              @default(now())
+  userId         Int?
+  providerId     Int?
+  type           String
+  status         String                @default("SCHEDULED")
+  scheduledDate  DateTime?
+  resolvedFaults Fault[]               @relation("ResolvedFaults")
+  provider       Provider?             @relation(fields: [providerId], references: [id])
+  user           User?                 @relation(fields: [userId], references: [id])
+  vehicle        Vehicle               @relation(fields: [vehicleId], references: [id])
+  updatedAt      DateTime              @updatedAt
+  evidence       MaintenanceEvidence[]
+  parts          MaintenancePart[]
+  tickets        MaintenanceTicket[]
 }
 
 model MaintenanceTicket {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  ticketNumber    String
-  cost            Decimal
-  date            DateTime @default(now())
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  ticketNumber  String
+  cost          Float
+  date          DateTime    @default(now())
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
 }
 
 model MaintenancePart {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  productId       Int     
-  product         Product  @relation(fields: [productId], references: [id])
-  quantity        Int      @default(1)
-  unitCost        Decimal? 
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  productId     Int
+  quantity      Int         @default(1)
+  unitCost      Float?
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id])
 }
 
 model MaintenanceEvidence {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  url             String
-  createdAt       DateTime @default(now())
-}
-
-enum MaintenanceType {
-  PREVENTIVE
-  CORRECTIVE
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  url           String
+  createdAt     DateTime    @default(now())
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
 }
 
 model Provider {
-  id          Int      @id @default(autoincrement())
-  name        String
-  contact     String?
-  services    String?
-  
-  cedisId     Int?
-  cedis       Cedis?    @relation(fields: [cedisId], references: [id])
-  
+  id           Int           @id @default(autoincrement())
+  name         String
+  contact      String?
+  services     String?
+  cedisId      Int?
   maintenances Maintenance[]
+  cedis        Cedis?        @relation(fields: [cedisId], references: [id])
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  code        String   @unique
-  description String?
-  category    String
-  
-  stock            InventoryStock[]
-  movements        InventoryMovement[]
+  id               Int               @id @default(autoincrement())
+  name             String
+  code             String            @unique
+  description      String?
+  category         String
   maintenanceParts MaintenancePart[]
   partExchanges    PartExchange[]
-}
-
-model InventoryStock {
-  id          Int      @id @default(autoincrement())
-  cedisId     Int
-  cedis       Cedis    @relation(fields: [cedisId], references: [id])
-  
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
-  
-  quantity    Int      @default(0)
-  
-  @@unique([cedisId, productId])
-}
-
-model InventoryMovement {
-  id          Int      @id @default(autoincrement())
-  cedisId     Int
-  cedis       Cedis    @relation(fields: [cedisId], references: [id])
-  
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
-  
-  type        InventoryStartType
-  quantity    Int
-  unitPrice   Decimal?
-  totalCost   Decimal?
-  
-  date        DateTime @default(now())
-  userId      Int?
-  user        User?    @relation(fields: [userId], references: [id])
-  
-  notes       String?
-  evidence    InventoryMovementEvidence[]
-}
-
-model InventoryMovementEvidence {
-  id          Int      @id @default(autoincrement())
-  movementId  Int
-  movement    InventoryMovement @relation(fields: [movementId], references: [id])
-  url         String
-  createdAt   DateTime @default(now())
-}
-
-enum InventoryStartType {
-  PURCHASE
-  TRANSFER_IN
-  TRANSFER_OUT
-  USAGE
-  LOSS
-  ADJUSTMENT
 }
 
 model TireRotation {
   id          Int      @id @default(autoincrement())
   vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
   date        DateTime @default(now())
   description String
   mileage     Int?
-  positionMap Json?
+  positionMap String?
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 }
 
 model PartExchange {
-  id              Int      @id @default(autoincrement())
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
-  productId       Int
-  product         Product  @relation(fields: [productId], references: [id])
-  action          String
-  quantity        Int      @default(1)
-  date            DateTime @default(now())
-  description     String
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  productId   Int
+  action      String
+  quantity    Int      @default(1)
+  date        DateTime @default(now())
+  description String
+  product     Product  @relation(fields: [productId], references: [id])
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 }
 
-enum Role {
-  ADMIN
-  OPERATOR
+model Fault {
+  id                     Int             @id @default(autoincrement())
+  vehicleId              Int
+  description            String
+  priority               String          @default("Media")
+  date                   DateTime        @default(now())
+  status                 String          @default("PENDING")
+  resolvingMaintenanceId Int?
+  resolvedAt             DateTime?
+  updatedAt              DateTime        @updatedAt
+  resolvingMaintenance   Maintenance?    @relation("ResolvedFaults", fields: [resolvingMaintenanceId], references: [id])
+  vehicle                Vehicle         @relation(fields: [vehicleId], references: [id])
+  evidence               FaultEvidence[]
 }
 
-enum VehicleStatus {
-  ACTIVE
-  MAINTENANCE
-  IN_TRANSIT
-}
-
-enum DocumentStatus {
-  VALID
-  EXPIRED
-  PENDING
-}
-
-enum MaintenanceStatus {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
+model FaultEvidence {
+  id        Int      @id @default(autoincrement())
+  faultId   Int
+  url       String
+  createdAt DateTime @default(now())
+  fault     Fault    @relation(fields: [faultId], references: [id])
 }

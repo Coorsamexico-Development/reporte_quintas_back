@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ProvidersService } from './providers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -10,8 +10,8 @@ export class ProvidersController {
     constructor(private readonly providersService: ProvidersService) { }
 
     @Get()
-    findAll() {
-        return this.providersService.findAll();
+    findAll(@Query('cedisId') cedisId?: number) {
+        return this.providersService.findAll(cedisId);
     }
 
     @Get(':id')
@@ -21,7 +21,7 @@ export class ProvidersController {
 
     @Post()
     @Roles('ADMIN')
-    create(@Body() data: { name: string; contact?: string; services?: string }) {
+    create(@Body() data: { name: string; contact?: string; services?: string; cedisId?: number }) {
         return this.providersService.create(data);
     }
 

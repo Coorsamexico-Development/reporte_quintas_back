@@ -1,0 +1,106 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Error validating: This line is not a valid field or attribute definition.
+  -->  prisma\schema.prisma:169
+   | 
+168 | 
+169 | model Provider {
+170 |   id          Int      @id @default(autoincrement())
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:204
+   | 
+203 | 
+204 | model PartExchange {
+205 |   id              Int      @id @default(autoincrement())
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:205
+   | 
+204 | model PartExchange {
+205 |   id              Int      @id @default(autoincrement())
+206 |   vehicleId       Int
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:206
+   | 
+205 |   id              Int      @id @default(autoincrement())
+206 |   vehicleId       Int
+207 |   vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:207
+   | 
+206 |   vehicleId       Int
+207 |   vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+208 |   productId       Int
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:208
+   | 
+207 |   vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+208 |   productId       Int
+209 |   product         Product  @relation(fields: [productId], references: [id])
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:209
+   | 
+208 |   productId       Int
+209 |   product         Product  @relation(fields: [productId], references: [id])
+210 |   action          String
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:210
+   | 
+209 |   product         Product  @relation(fields: [productId], references: [id])
+210 |   action          String
+211 |   quantity        Int      @default(1)
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:211
+   | 
+210 |   action          String
+211 |   quantity        Int      @default(1)
+212 |   date            DateTime @default(now())
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:212
+   | 
+211 |   quantity        Int      @default(1)
+212 |   date            DateTime @default(now())
+213 |   description     String
+   | 
+
+
+error: Error validating: This line is invalid. It does not start with any known Prisma schema keyword.
+  -->  prisma\schema.prisma:213
+   | 
+212 |   date            DateTime @default(now())
+213 |   description     String
+214 | 
+   | 
+
+Validation Error Count: 11
+[Context: getConfig]
+
+Prisma CLI Version : 5.22.0

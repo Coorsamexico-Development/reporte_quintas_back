@@ -1,0 +1,65 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": SQLite database "dev.db" at "file:./dev.db"
+
+SQLite database dev.db created at file:./dev.db
+Error: P1012
+
+error: Error validating field `positionMap` in model `TireRotation`: Field `positionMap` in model `TireRotation` can't be of type Json. The current connector does not support the Json type.
+  -->  prisma\schema.prisma:206
+   | 
+205 |   mileage     Int?
+206 |   positionMap Json?
+207 | }
+   | 
+error: Error validating: You defined the enum `MaintenanceType`. But the current connector does not support enums.
+  -->  prisma\schema.prisma:169
+   | 
+168 | 
+169 | enum MaintenanceType {
+170 |   PREVENTIVE
+171 |   CORRECTIVE
+172 | }
+   | 
+error: Error validating: You defined the enum `Role`. But the current connector does not support enums.
+  -->  prisma\schema.prisma:221
+   | 
+220 | 
+221 | enum Role {
+222 |   ADMIN
+223 |   OPERATOR
+224 | }
+   | 
+error: Error validating: You defined the enum `VehicleStatus`. But the current connector does not support enums.
+  -->  prisma\schema.prisma:226
+   | 
+225 | 
+226 | enum VehicleStatus {
+227 |   ACTIVE
+228 |   MAINTENANCE
+229 |   IN_TRANSIT
+230 | }
+   | 
+error: Error validating: You defined the enum `DocumentStatus`. But the current connector does not support enums.
+  -->  prisma\schema.prisma:232
+   | 
+231 | 
+232 | enum DocumentStatus {
+233 |   VALID
+234 |   EXPIRED
+235 |   PENDING
+236 | }
+   | 
+error: Error validating: You defined the enum `MaintenanceStatus`. But the current connector does not support enums.
+  -->  prisma\schema.prisma:238
+   | 
+237 | 
+238 | enum MaintenanceStatus {
+239 |   SCHEDULED
+240 |   IN_PROGRESS
+241 |   COMPLETED
+242 |   CANCELLED
+243 | }
+   | 
+
+

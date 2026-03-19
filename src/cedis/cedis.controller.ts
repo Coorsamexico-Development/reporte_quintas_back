@@ -21,13 +21,13 @@ export class CedisController {
 
     @Post()
     @Roles('ADMIN')
-    create(@Body() data: { name: string; location?: string }) {
+    create(@Body() data: { name: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
         return this.cedisService.create(data);
     }
 
     @Put(':id')
     @Roles('ADMIN')
-    update(@Param('id', ParseIntPipe) id: number, @Body() data: { name?: string; location?: string }) {
+    update(@Param('id', ParseIntPipe) id: number, @Body() data: { name?: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
         return this.cedisService.update(id, data);
     }
 

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { VehicleStatus } from '@prisma/client';
+export type VehicleStatus = 'ACTIVE' | 'MAINTENANCE' | 'IN_TRANSIT';
 
 @Injectable()
 export class VehiclesService {
@@ -10,6 +10,17 @@ export class VehiclesService {
         return this.prisma.vehicle.findMany({
             include: {
                 currentCedis: true,
+                maintenanceLogs: {
+                    include: { provider: true, parts: { include: { product: true } } },
+                    orderBy: { date: 'desc' }
+                },
+                faults: {
+                    orderBy: { date: 'desc' }
+                },
+                movementHistory: {
+                    include: { fromCedis: true, toCedis: true },
+                    orderBy: { date: 'desc' }
+                },
                 _count: {
                     select: { documents: true, maintenanceLogs: true },
                 },
@@ -41,13 +52,33 @@ export class VehiclesService {
         return vehicle;
     }
 
-    async create(data: { plate: string; truckNumber: string; status: VehicleStatus; currentCedisId?: number }) {
+    async create(data: { 
+        plate: string; 
+        truckNumber: string; 
+        status: VehicleStatus; 
+        currentCedisId?: number;
+        engine?: string;
+        yearModel?: number;
+        transmission?: string;
+        fuelType?: string;
+        vin?: string;
+    }) {
         return this.prisma.vehicle.create({
             data,
         });
     }
 
-    async update(id: number, data: { plate?: string; truckNumber?: string; status?: VehicleStatus }) {
+    async update(id: number, data: { 
+        plate?: string; 
+        truckNumber?: string; 
+        status?: VehicleStatus;
+        currentCedisId?: number;
+        engine?: string;
+        yearModel?: number;
+        transmission?: string;
+        fuelType?: string;
+        vin?: string;
+    }) {
         return this.prisma.vehicle.update({
             where: { id },
             data,
