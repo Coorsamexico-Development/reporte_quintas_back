@@ -13,9 +13,9 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT ?? 3001;
-  console.log(`📡 Intentando escuchar en el puerto: ${port} en 127.0.0.1`);
+  console.log(`📡 Intentando escuchar en el puerto: ${port} en 0.0.0.0`);
   
-  await app.listen(port, '127.0.0.1');
-  console.log(`✅ Aplicación lista y escuchando en http://127.0.0.1:${port}`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`✅ Aplicación lista y escuchando en http://0.0.0.0:${port}`);
 }
 bootstrap();
