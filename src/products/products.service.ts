@@ -12,6 +12,11 @@ export class ProductsService {
     async findOne(id: number) {
         return this.prisma.product.findUnique({
             where: { id },
+            include: {
+                stock: {
+                    include: { cedis: true },
+                },
+            },
         });
     }
 

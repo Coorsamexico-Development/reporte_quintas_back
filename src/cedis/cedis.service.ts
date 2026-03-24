@@ -20,17 +20,20 @@ export class CedisService {
             where: { id },
             include: {
                 currentVehicles: true,
+                inventoryStock: {
+                    include: { product: true },
+                },
             },
         });
     }
 
-    async create(data: { name: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
+    async create(data: { name: string; location?: string }) {
         return this.prisma.cedis.create({
             data,
         });
     }
 
-    async update(id: number, data: { name?: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
+    async update(id: number, data: { name?: string; location?: string }) {
         return this.prisma.cedis.update({
             where: { id },
             data,

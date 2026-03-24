@@ -1,55 +1,39 @@
-# 1. Base stage - Instalación de dependencias básicas
-FROM node:20-alpine AS base
-WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+# Etapa de construcción
+FROM node:20-alpine AS builder
 
-# 2. Dependencies stage - Instalación de dependencias de producción y desarrollo
-FROM base AS deps
+WORKDIR /app
+
+# Instalar dependencias
 COPY package*.json ./
-COPY prisma ./prisma/
-# Instalamos todas las dependencias para poder construir el proyecto
 RUN npm ci
 
-# 3. Builder stage - Construcción de la aplicación
-FROM deps AS builder
+# Copiar el código fuente y el schema de Prisma
 COPY . .
+
+# Generar el cliente de Prisma
 RUN npx prisma generate
+
+# Compilar la aplicación NestJS
 RUN npm run build
-# NOTA: No hacemos prune aquí para mantener el CLI de prisma disponible
-# Si el tamaño es crítico, se podría mover prisma a dependencies en package.json
 
-# 4. Runner stage - Imagen final para producción
-FROM base AS runner
-ENV NODE_ENV=production
-# Dejamos que Cloud Run defina el PORT (default 8080)
-ENV PORT=8080
+# Etapa de producción
+FROM node:20-alpine AS runner
 
-# Crear usuario no root para seguridad
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+WORKDIR /app
 
-# Copiar archivos necesarios desde las etapas anteriores
-COPY --from=builder /app/dist ./dist
+# Copiar package.json y dependencias
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
-# Ajustar permisos
-RUN chown -R nestjs:nodejs /app
+# Instalar npx
+# Variables de entorno por defecto (se sobreescriben en Cloud Run)
+ENV NODE_ENV=production
+ENV PORT=3001
 
-USER nestjs
+# Exponer el puerto
+EXPOSE 3001
 
-# Cloud Run escucha por defecto en el 8080
-EXPOSE 8080
-
-# Script para ejecutar migraciones y arrancar la aplicación
-# Usamos un script más detallado para facilitar la depuración en Cloud Run
-CMD ["sh", "-c", "echo \"🔍 [$(date '+%Y-%m-%d %H:%M:%S')] Iniciando proceso de arranque en Cloud Run...\"; \
-           echo \"📡 [$(date '+%Y-%m-%d %H:%M:%S')] Verificando conexión con la base de datos...\"; \
-           if [ -z \"$DATABASE_URL\" ]; then echo \"❌ [$(date '+%Y-%m-%d %H:%M:%S')] ERROR: DATABASE_URL no está definida.\"; exit 1; fi; \
-           echo \"📂 [$(date '+%Y-%m-%d %H:%M:%S')] Aplicando migraciones de Prisma...\"; \
-           npx prisma migrate deploy || { echo \"❌ [$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Fallaron las migraciones. Revisa los logs de Cloud SQL Proxy o la red.\"; exit 1; }; \
-           echo \"🚀 [$(date '+%Y-%m-%d %H:%M:%S')] Migraciones exitosas. Iniciando servidor NestJS...\"; \
-           node dist/main.js"]
-
-
+# Scripts de inicio (Aplica esquema y luego arranca)
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/main.js"]

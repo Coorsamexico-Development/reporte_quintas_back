@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, Put, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { VehiclesService, VehicleStatus } from './vehicles.service';
+import { VehiclesService } from './vehicles.service';
+import { VehicleStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -28,11 +29,6 @@ export class VehiclesController {
             truckNumber: string;
             status: VehicleStatus;
             currentCedisId?: number;
-            engine?: string;
-            yearModel?: number;
-            transmission?: string;
-            fuelType?: string;
-            vin?: string;
         },
     ) {
         return this.vehiclesService.create(data);
@@ -42,17 +38,7 @@ export class VehiclesController {
     @Roles('ADMIN')
     update(
         @Param('id', ParseIntPipe) id: number,
-        @Body() data: { 
-            plate?: string; 
-            truckNumber?: string; 
-            status?: VehicleStatus;
-            currentCedisId?: number;
-            engine?: string;
-            yearModel?: number;
-            transmission?: string;
-            fuelType?: string;
-            vin?: string;
-        },
+        @Body() data: { plate?: string; truckNumber?: string; status?: VehicleStatus },
     ) {
         return this.vehiclesService.update(id, data);
     }

@@ -1,6 +1,0 @@
-Environment variables loaded from .env
-Prisma schema loaded from prisma\schema.prisma
-Error: 
-EPERM: operation not permitted, rename 'C:\Users\rober\OneDrive\Escritorio\pruebasraras\reporte_quintas\reporte_quintas_hub\Back\node_modules\.prisma\client\query_engine-windows.dll.node.tmp20020' -> 'C:\Users\rober\OneDrive\Escritorio\pruebasraras\reporte_quintas\reporte_quintas_hub\Back\node_modules\.prisma\client\query_engine-windows.dll.node'
-
-
