@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Instalar dependencias
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copiar el código fuente y el schema de Prisma
 COPY . .
