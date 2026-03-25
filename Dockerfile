@@ -30,10 +30,10 @@ COPY --from=builder /app/prisma ./prisma
 # Instalar npx
 # Variables de entorno por defecto (se sobreescriben en Cloud Run)
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=8080
 
 # Exponer el puerto
-EXPOSE 3001
+EXPOSE 8080
 
 # Scripts de inicio (Aplica esquema y luego arranca)
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy || (echo 'Migration failed, attempting push...' && npx prisma db push --accept-data-loss) && node dist/main.js"]
