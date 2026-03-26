@@ -9,20 +9,23 @@ export class UsersService implements OnModuleInit {
     constructor(private prisma: PrismaService) { }
 
     async onModuleInit() {
-        const count = await this.prisma.user.count();
-        if (count === 0) {
-            this.logger.log('No users found in database. Presetting default ADMIN user...');
-            const hashedPassword = await bcrypt.hash('admin123', 10);
-            await this.prisma.user.create({
-                data: {
-                    name: 'Administrador Principal',
-                    email: 'admin@admin.com',
-                    password: hashedPassword,
-                    role: 'ADMIN',
-                }
-            });
-            this.logger.log('Default ADMIN created. Email: admin@admin.com | Password: admin123');
-        }
+        this.logger.log('Checking/Upserting default ADMIN user...');
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        await this.prisma.user.upsert({
+            where: { email: 'admin@admin.com' },
+            update: {
+                password: hashedPassword,
+                role: 'ADMIN',
+                name: 'Administrador Principal'
+            },
+            create: {
+                name: 'Administrador Principal',
+                email: 'admin@admin.com',
+                password: hashedPassword,
+                role: 'ADMIN',
+            }
+        });
+        this.logger.log('Default ADMIN ensured. Email: admin@admin.com | Password: admin123');
     }
 
     async findAll() {
