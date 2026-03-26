@@ -40,5 +40,5 @@ ENV PORT=8080
 # Exponer el puerto
 EXPOSE 8080
 
-# Scripts de inicio (Asegura la ruta correcta a dist/src/main.js)
-CMD ["node", "dist/src/main.js"]
+# Scripts de inicio (Aplica esquema y luego arranca)
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
