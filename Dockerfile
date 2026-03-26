@@ -40,5 +40,5 @@ ENV PORT=8080
 # Exponer el puerto
 EXPOSE 8080
 
-# Scripts de inicio (Solo arranca la app para diagnosticar el puerto)
-CMD ["node", "dist/main.js"]
+# Scripts de inicio (Asegura la ruta correcta a dist/src/main.js)
+CMD ["node", "dist/src/main.js"]
