@@ -10,6 +10,9 @@ export class VehiclesService {
         return this.prisma.vehicle.findMany({
             include: {
                 currentCedis: true,
+                brand: true,
+                transmissionRel: true,
+                fuelTypeRel: true,
                 _count: {
                     select: { documents: true, maintenanceLogs: true },
                 },
@@ -22,6 +25,9 @@ export class VehiclesService {
             where: { id },
             include: {
                 currentCedis: true,
+                brand: true,
+                transmissionRel: true,
+                fuelTypeRel: true,
                 documents: {
                     include: { type: true, evidence: true },
                 },
@@ -41,7 +47,18 @@ export class VehiclesService {
         return vehicle;
     }
 
-    async create(data: { plate: string; truckNumber: string; status: VehicleStatus; currentCedisId?: number }) {
+    async create(data: { 
+        plate: string; 
+        truckNumber: string; 
+        status: VehicleStatus; 
+        currentCedisId?: number;
+        brandId?: number;
+        transmissionId?: number;
+        fuelTypeId?: number;
+        engine?: string;
+        yearModel?: number;
+        vin?: string;
+    }) {
         return this.prisma.vehicle.create({
             data,
         });

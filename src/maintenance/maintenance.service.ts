@@ -76,7 +76,33 @@ export class MaintenanceService {
         productId: number;
         action: string;
         description: string;
+        targetVehicleId?: number;
     }) {
+        // Si hay un vehículo destino, guardamos el log para ambos
+        if (data.targetVehicleId) {
+            await this.prisma.$transaction([
+                this.prisma.partExchange.create({
+                    data: {
+                        vehicleId: data.vehicleId,
+                        date: data.date,
+                        productId: data.productId,
+                        action: 'RETIRO',
+                        description: `Canibalización para unidad: ${data.targetVehicleId}. ${data.description}`,
+                    }
+                }),
+                this.prisma.partExchange.create({
+                    data: {
+                        vehicleId: data.targetVehicleId,
+                        date: data.date,
+                        productId: data.productId,
+                        action: 'INSTALACION',
+                        description: `Componente extraído de unidad: ${data.vehicleId}. ${data.description}`,
+                    }
+                })
+            ]);
+            return { message: 'Intercambio registrado entre ambas unidades' };
+        }
+
         return this.prisma.partExchange.create({
             data: {
                 vehicleId: data.vehicleId,

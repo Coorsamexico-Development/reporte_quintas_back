@@ -27,13 +27,13 @@ export class CedisService {
         });
     }
 
-    async create(data: { name: string; location?: string }) {
+    async create(data: { name: string; location?: string; latitude?: number; longitude?: number }) {
         return this.prisma.cedis.create({
             data,
         });
     }
 
-    async update(id: number, data: { name?: string; location?: string }) {
+    async update(id: number, data: { name?: string; location?: string; latitude?: number; longitude?: number }) {
         return this.prisma.cedis.update({
             where: { id },
             data,

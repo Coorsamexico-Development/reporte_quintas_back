@@ -7,240 +7,286 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Global System Users (Staff, Admins)
 model User {
-  id              Int      @id @default(autoincrement())
-  email           String   @unique
-  name            String
-  role            Role     @default(OPERATOR)
-  password        String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Relations
-  maintenanceLogs     Maintenance[]
-  vehicleMovements    VehicleMovement[]
+  id                 Int                 @id @default(autoincrement())
+  email              String              @unique
+  name               String
+  role               Role                @default(OPERATOR)
+  password           String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   inventoryMovements InventoryMovement[]
+  maintenanceLogs    Maintenance[]
+  vehicleMovements   VehicleMovement[]
 }
 
 model Cedis {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  client      String?  // Cliente asociado al CEDIS
-  location    String?
-  
-  // Vehicles currently at this CEDIS
-  currentVehicles    Vehicle[] @relation("VehicleLocation")
-  
-  // Current Stock
-  inventoryStock     InventoryStock[]
-  
-  // Movements related to this CEDIS
-  vehicleArrivals    VehicleMovement[] @relation("ToCedis")
-  vehicleDepartures  VehicleMovement[] @relation("FromCedis")
-  
+  id                 Int                 @id @default(autoincrement())
+  name               String              @unique
+  client             String?
+  location           String?
+  latitude           Float?
+  longitude          Float?
   inventoryMovements InventoryMovement[]
+  inventoryStock     InventoryStock[]
   providers          Provider[]
+  currentVehicles    Vehicle[]           @relation("VehicleLocation")
+  vehicleDepartures  VehicleMovement[]   @relation("FromCedis")
+  vehicleArrivals    VehicleMovement[]   @relation("ToCedis")
 }
 
 model Vehicle {
-  id              Int      @id @default(autoincrement())
-  plate           String   @unique
-  truckNumber     String   @unique
-  status          VehicleStatus @default(ACTIVE)
-  
-  // Technical Specs
+  id              Int               @id @default(autoincrement())
+  plate           String            @unique
+  truckNumber     String            @unique
+  status          VehicleStatus     @default(ACTIVE)
   engine          String?
   yearModel       Int?
   transmission    String?
   fuelType        String?
-  vin             String?  @unique
-  
-  // Current Location
+  vin             String?           @unique
   currentCedisId  Int?
-  currentCedis    Cedis?   @relation("VehicleLocation", fields: [currentCedisId], references: [id])
-  
-  // Document Management
-  documents       VehicleDocument[]
-  
-  // Maintenance & Repairs
+  brandId         Int?
+  fuelTypeId      Int?
+  transmissionId  Int?
   maintenanceLogs Maintenance[]
-  tireRotations   TireRotation[]
   partExchanges   PartExchange[]
-  
-  // Movement History
+  tireRotations   TireRotation[]
+  brand           VehicleBrand?     @relation(fields: [brandId], references: [id])
+  currentCedis    Cedis?            @relation("VehicleLocation", fields: [currentCedisId], references: [id])
+  fuelTypeRel     FuelType?         @relation(fields: [fuelTypeId], references: [id])
+  transmissionRel TransmissionType? @relation(fields: [transmissionId], references: [id])
+  documents       VehicleDocument[]
   movementHistory VehicleMovement[]
+
+  @@index([brandId], map: "Vehicle_brandId_fkey")
+  @@index([currentCedisId], map: "Vehicle_currentCedisId_fkey")
+  @@index([fuelTypeId], map: "Vehicle_fuelTypeId_fkey")
+  @@index([transmissionId], map: "Vehicle_transmissionId_fkey")
 }
 
 model VehicleMovement {
   id          Int      @id @default(autoincrement())
   vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
-  
   fromCedisId Int?
-  fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
-  
   toCedisId   Int
-  toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
-  
   date        DateTime @default(now())
   userId      Int
-  user        User     @relation(fields: [userId], references: [id])
   reason      String?
+  fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
+  toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  @@index([fromCedisId], map: "VehicleMovement_fromCedisId_fkey")
+  @@index([toCedisId], map: "VehicleMovement_toCedisId_fkey")
+  @@index([userId], map: "VehicleMovement_userId_fkey")
+  @@index([vehicleId], map: "VehicleMovement_vehicleId_fkey")
 }
 
 model DocumentType {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
   description String?
   alertDays   Int?
-  
   documents   VehicleDocument[]
 }
 
 model VehicleDocument {
-  id          Int      @id @default(autoincrement())
-  vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
-  
-  typeId      Int
-  type        DocumentType @relation(fields: [typeId], references: [id])
-  
-  issueDate   DateTime
-  expiryDate  DateTime
-  status      DocumentStatus @default(PENDING)
-  
-  evidence    VehicleDocumentEvidence[]
+  id         Int                       @id @default(autoincrement())
+  vehicleId  Int
+  typeId     Int
+  issueDate  DateTime
+  expiryDate DateTime
+  status     DocumentStatus            @default(PENDING)
+  type       DocumentType              @relation(fields: [typeId], references: [id])
+  vehicle    Vehicle                   @relation(fields: [vehicleId], references: [id])
+  evidence   VehicleDocumentEvidence[]
+
+  @@index([typeId], map: "VehicleDocument_typeId_fkey")
+  @@index([vehicleId], map: "VehicleDocument_vehicleId_fkey")
 }
 
 model VehicleDocumentEvidence {
-  id          Int      @id @default(autoincrement())
-  documentId  Int
-  document    VehicleDocument @relation(fields: [documentId], references: [id])
-  url         String
-  createdAt   DateTime @default(now())
+  id         Int             @id @default(autoincrement())
+  documentId Int
+  url        String
+  createdAt  DateTime        @default(now())
+  document   VehicleDocument @relation(fields: [documentId], references: [id])
+
+  @@index([documentId], map: "VehicleDocumentEvidence_documentId_fkey")
 }
 
 model Maintenance {
-  id              Int      @id @default(autoincrement())
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
-  
-  type            MaintenanceType
-  description     String
-  date            DateTime @default(now())
-  
-  userId          Int?
-  user            User?    @relation(fields: [userId], references: [id])
-  
-  providerId      Int?
-  provider        Provider? @relation(fields: [providerId], references: [id])
-  
-  tickets         MaintenanceTicket[]
-  parts           MaintenancePart[]
-  
-  status          MaintenanceStatus @default(SCHEDULED)
-  
-  evidence        MaintenanceEvidence[]
+  id          Int                   @id @default(autoincrement())
+  vehicleId   Int
+  type        MaintenanceType
+  description String
+  date        DateTime              @default(now())
+  userId      Int?
+  providerId  Int?
+  status      MaintenanceStatus     @default(SCHEDULED)
+  provider    Provider?             @relation(fields: [providerId], references: [id])
+  user        User?                 @relation(fields: [userId], references: [id])
+  vehicle     Vehicle               @relation(fields: [vehicleId], references: [id])
+  evidence    MaintenanceEvidence[]
+  parts       MaintenancePart[]
+  tickets     MaintenanceTicket[]
+
+  @@index([providerId], map: "Maintenance_providerId_fkey")
+  @@index([userId], map: "Maintenance_userId_fkey")
+  @@index([vehicleId], map: "Maintenance_vehicleId_fkey")
 }
 
 model MaintenanceTicket {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  ticketNumber    String
-  cost            Decimal
-  date            DateTime @default(now())
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  ticketNumber  String
+  cost          Decimal
+  date          DateTime    @default(now())
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
+
+  @@index([maintenanceId], map: "MaintenanceTicket_maintenanceId_fkey")
 }
 
 model MaintenancePart {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  productId       Int     
-  product         Product  @relation(fields: [productId], references: [id])
-  quantity        Int      @default(1)
-  unitCost        Decimal? 
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  productId     Int
+  quantity      Int         @default(1)
+  unitCost      Decimal?
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id])
+
+  @@index([maintenanceId], map: "MaintenancePart_maintenanceId_fkey")
+  @@index([productId], map: "MaintenancePart_productId_fkey")
 }
 
 model MaintenanceEvidence {
-  id              Int      @id @default(autoincrement())
-  maintenanceId   Int
-  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id])
-  url             String
-  createdAt       DateTime @default(now())
-}
+  id            Int         @id @default(autoincrement())
+  maintenanceId Int
+  url           String
+  createdAt     DateTime    @default(now())
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
 
-enum MaintenanceType {
-  PREVENTIVE
-  CORRECTIVE
+  @@index([maintenanceId], map: "MaintenanceEvidence_maintenanceId_fkey")
 }
 
 model Provider {
-  id          Int      @id @default(autoincrement())
-  name        String
-  contact     String?
-  services    String?
-  
-  cedisId     Int?
-  cedis       Cedis?    @relation(fields: [cedisId], references: [id])
-  
+  id           Int           @id @default(autoincrement())
+  name         String
+  contact      String?
+  services     String?
+  cedisId      Int?
   maintenances Maintenance[]
+  cedis        Cedis?        @relation(fields: [cedisId], references: [id])
+
+  @@index([cedisId], map: "Provider_cedisId_fkey")
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  code        String   @unique
-  description String?
-  category    String
-  
-  stock            InventoryStock[]
+  id               Int                 @id @default(autoincrement())
+  name             String
+  code             String              @unique
+  description      String?
+  category         String
   movements        InventoryMovement[]
+  stock            InventoryStock[]
   maintenanceParts MaintenancePart[]
   partExchanges    PartExchange[]
 }
 
 model InventoryStock {
-  id          Int      @id @default(autoincrement())
-  cedisId     Int
-  cedis       Cedis    @relation(fields: [cedisId], references: [id])
-  
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
-  
-  quantity    Int      @default(0)
-  
+  id        Int     @id @default(autoincrement())
+  cedisId   Int
+  productId Int
+  quantity  Int     @default(0)
+  cedis     Cedis   @relation(fields: [cedisId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+
   @@unique([cedisId, productId])
+  @@index([productId], map: "InventoryStock_productId_fkey")
 }
 
 model InventoryMovement {
-  id          Int      @id @default(autoincrement())
-  cedisId     Int
-  cedis       Cedis    @relation(fields: [cedisId], references: [id])
-  
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
-  
-  type        InventoryStartType
-  quantity    Int
-  unitPrice   Decimal?
-  totalCost   Decimal?
-  
-  date        DateTime @default(now())
-  userId      Int?
-  user        User?    @relation(fields: [userId], references: [id])
-  
-  notes       String?
-  evidence    InventoryMovementEvidence[]
+  id        Int                         @id @default(autoincrement())
+  cedisId   Int
+  productId Int
+  type      InventoryStartType
+  quantity  Int
+  unitPrice Decimal?
+  totalCost Decimal?
+  date      DateTime                    @default(now())
+  userId    Int?
+  notes     String?
+  cedis     Cedis                       @relation(fields: [cedisId], references: [id])
+  product   Product                     @relation(fields: [productId], references: [id])
+  user      User?                       @relation(fields: [userId], references: [id])
+  evidence  InventoryMovementEvidence[]
+
+  @@index([cedisId], map: "InventoryMovement_cedisId_fkey")
+  @@index([productId], map: "InventoryMovement_productId_fkey")
+  @@index([userId], map: "InventoryMovement_userId_fkey")
 }
 
 model InventoryMovementEvidence {
+  id         Int               @id @default(autoincrement())
+  movementId Int
+  url        String
+  createdAt  DateTime          @default(now())
+  movement   InventoryMovement @relation(fields: [movementId], references: [id])
+
+  @@index([movementId], map: "InventoryMovementEvidence_movementId_fkey")
+}
+
+model TireRotation {
   id          Int      @id @default(autoincrement())
-  movementId  Int
-  movement    InventoryMovement @relation(fields: [movementId], references: [id])
-  url         String
-  createdAt   DateTime @default(now())
+  vehicleId   Int
+  date        DateTime @default(now())
+  description String
+  mileage     Int?
+  positionMap Json?
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId], map: "TireRotation_vehicleId_fkey")
+}
+
+model PartExchange {
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  productId   Int
+  action      String
+  quantity    Int      @default(1)
+  date        DateTime @default(now())
+  description String
+  product     Product  @relation(fields: [productId], references: [id])
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  @@index([productId], map: "PartExchange_productId_fkey")
+  @@index([vehicleId], map: "PartExchange_vehicleId_fkey")
+}
+
+model VehicleBrand {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  vehicles Vehicle[]
+}
+
+model TransmissionType {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  vehicles Vehicle[]
+}
+
+model FuelType {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  vehicles Vehicle[]
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
 }
 
 enum InventoryStartType {
@@ -250,28 +296,6 @@ enum InventoryStartType {
   USAGE
   LOSS
   ADJUSTMENT
-}
-
-model TireRotation {
-  id          Int      @id @default(autoincrement())
-  vehicleId   Int
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
-  date        DateTime @default(now())
-  description String
-  mileage     Int?
-  positionMap Json?
-}
-
-model PartExchange {
-  id              Int      @id @default(autoincrement())
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
-  productId       Int
-  product         Product  @relation(fields: [productId], references: [id])
-  action          String
-  quantity        Int      @default(1)
-  date            DateTime @default(now())
-  description     String
 }
 
 enum Role {
