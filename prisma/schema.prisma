@@ -58,6 +58,7 @@ model Vehicle {
   transmissionRel TransmissionType? @relation(fields: [transmissionId], references: [id])
   documents       VehicleDocument[]
   movementHistory VehicleMovement[]
+  faults          Fault[]
 
   @@index([brandId], map: "Vehicle_brandId_fkey")
   @@index([currentCedisId], map: "Vehicle_currentCedisId_fkey")
@@ -76,12 +77,20 @@ model VehicleMovement {
   fromCedis   Cedis?   @relation("FromCedis", fields: [fromCedisId], references: [id])
   toCedis     Cedis    @relation("ToCedis", fields: [toCedisId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicle     Vehicle                   @relation(fields: [vehicleId], references: [id])
+  evidence    VehicleMovementEvidence[]
 
-  @@index([fromCedisId], map: "VehicleMovement_fromCedisId_fkey")
-  @@index([toCedisId], map: "VehicleMovement_toCedisId_fkey")
-  @@index([userId], map: "VehicleMovement_userId_fkey")
   @@index([vehicleId], map: "VehicleMovement_vehicleId_fkey")
+}
+
+model VehicleMovementEvidence {
+  id         Int             @id @default(autoincrement())
+  movementId Int
+  url        String
+  createdAt  DateTime        @default(now())
+  movement   VehicleMovement @relation(fields: [movementId], references: [id])
+
+  @@index([movementId], map: "VehicleMovementEvidence_movementId_fkey")
 }
 
 model DocumentType {
@@ -118,20 +127,21 @@ model VehicleDocumentEvidence {
 }
 
 model Maintenance {
-  id          Int                   @id @default(autoincrement())
-  vehicleId   Int
-  type        MaintenanceType
-  description String
-  date        DateTime              @default(now())
-  userId      Int?
-  providerId  Int?
-  status      MaintenanceStatus     @default(SCHEDULED)
-  provider    Provider?             @relation(fields: [providerId], references: [id])
-  user        User?                 @relation(fields: [userId], references: [id])
-  vehicle     Vehicle               @relation(fields: [vehicleId], references: [id])
-  evidence    MaintenanceEvidence[]
-  parts       MaintenancePart[]
-  tickets     MaintenanceTicket[]
+  id             Int                   @id @default(autoincrement())
+  vehicleId      Int
+  type           MaintenanceType
+  description    String
+  date           DateTime              @default(now())
+  userId         Int?
+  providerId     Int?
+  status         MaintenanceStatus     @default(SCHEDULED)
+  provider       Provider?             @relation(fields: [providerId], references: [id])
+  user           User?                 @relation(fields: [userId], references: [id])
+  vehicle        Vehicle               @relation(fields: [vehicleId], references: [id])
+  evidence       MaintenanceEvidence[]
+  parts          MaintenancePart[]
+  tickets        MaintenanceTicket[]
+  faultsResolved Fault[]
 
   @@index([providerId], map: "Maintenance_providerId_fkey")
   @@index([userId], map: "Maintenance_userId_fkey")
@@ -139,14 +149,65 @@ model Maintenance {
 }
 
 model MaintenanceTicket {
-  id            Int         @id @default(autoincrement())
+  id            Int                     @id @default(autoincrement())
   maintenanceId Int
   ticketNumber  String
   cost          Decimal
-  date          DateTime    @default(now())
-  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
+  date          DateTime                @default(now())
+  maintenance   Maintenance             @relation(fields: [maintenanceId], references: [id])
+  items         MaintenanceTicketItem[]
 
   @@index([maintenanceId], map: "MaintenanceTicket_maintenanceId_fkey")
+}
+
+model MaintenanceTicketItem {
+  id          Int               @id @default(autoincrement())
+  ticketId    Int
+  description String
+  cost        Decimal
+  ticket      MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId], map: "MaintenanceTicketItem_ticketId_fkey")
+}
+
+model Fault {
+  id            Int           @id @default(autoincrement())
+  vehicleId     Int
+  description   String        @db.Text
+  severity      FaultSeverity @default(MEDIUM)
+  status        FaultStatus   @default(PENDING)
+  reportedAt    DateTime      @default(now())
+  resolvedAt    DateTime?
+  maintenanceId Int?
+
+  vehicle     Vehicle         @relation(fields: [vehicleId], references: [id])
+  maintenance Maintenance?     @relation(fields: [maintenanceId], references: [id])
+  evidence    FaultEvidence[]
+
+  @@index([vehicleId], map: "Fault_vehicleId_fkey")
+  @@index([maintenanceId], map: "Fault_maintenanceId_fkey")
+}
+
+model FaultEvidence {
+  id        Int      @id @default(autoincrement())
+  faultId   Int
+  url       String
+  createdAt DateTime @default(now())
+  fault     Fault    @relation(fields: [faultId], references: [id])
+
+  @@index([faultId], map: "FaultEvidence_faultId_fkey")
+}
+
+enum FaultSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FaultStatus {
+  PENDING
+  RESOLVED
 }
 
 model MaintenancePart {

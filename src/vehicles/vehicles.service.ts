@@ -39,7 +39,10 @@ export class VehiclesService {
                     orderBy: { date: 'desc' },
                 },
                 tireRotations: true,
-                partExchanges: true,
+                partExchanges: {
+                    include: { product: true }
+                },
+                faults: true
             },
         });
 
@@ -95,5 +98,88 @@ export class VehiclesService {
 
             return movement;
         });
+    }
+    async getVehicleHistory(id: number) {
+        const vehicle = await this.prisma.vehicle.findUnique({
+            where: { id },
+            include: {
+                maintenanceLogs: {
+                    include: { provider: true, user: true, evidence: true },
+                    orderBy: { date: 'desc' }
+                },
+                movementHistory: {
+                    include: { fromCedis: true, toCedis: true, user: true, evidence: true },
+                    orderBy: { date: 'desc' }
+                },
+                faults: {
+                    include: { evidence: true },
+                    orderBy: { reportedAt: 'desc' }
+                },
+                partExchanges: {
+                    include: { product: true },
+                    orderBy: { date: 'desc' }
+                },
+                tireRotations: {
+                    orderBy: { date: 'desc' }
+                }
+            }
+        });
+
+        if (!vehicle) throw new NotFoundException('Vehicle not found');
+
+        // Map and sort all events into a single timeline
+        const events: any[] = [
+            ...vehicle.maintenanceLogs.map(log => ({
+                id: `maintenance-${log.id}`,
+                type: 'MAINTENANCE',
+                date: log.date,
+                title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                description: log.description,
+                user: log.user?.name,
+                meta: { provider: log.provider?.name, status: log.status },
+                evidence: log.evidence.map(e => e.url)
+            })),
+            ...vehicle.movementHistory.map(mov => ({
+                id: `movement-${mov.id}`,
+                type: 'MOVEMENT',
+                date: mov.date,
+                title: 'Movimiento de CEDIS',
+                description: mov.reason || `Traslado de ${mov.fromCedis?.name || 'Origen desconocido'} a ${mov.toCedis.name}`,
+                user: mov.user.name,
+                meta: { from: mov.fromCedis?.name, to: mov.toCedis.name },
+                evidence: mov.evidence.map(e => e.url)
+            })),
+            ...vehicle.faults.map(fault => ({
+                id: `fault-${fault.id}`,
+                type: 'FAULT',
+                date: fault.reportedAt,
+                title: 'Reporte de Avería',
+                description: fault.description,
+                meta: { 
+                    severity: fault.severity, 
+                    status: fault.status,
+                    resolvedAt: fault.resolvedAt 
+                },
+                evidence: fault.evidence.map(e => e.url)
+            })),
+            ...vehicle.partExchanges.map(ex => ({
+                id: `exchange-${ex.id}`,
+                type: 'PART_EXCHANGE',
+                date: ex.date,
+                title: 'Cambio de Pieza',
+                description: `${ex.action === 'REMOVED' ? 'Se retiró' : 'Se recibió'} ${ex.product.name}`,
+                meta: { product: ex.product.name, action: ex.action }
+            })),
+            ...vehicle.tireRotations.map(rot => ({
+                id: `tire-${rot.id}`,
+                type: 'TIRE_ROTATION',
+                date: rot.date,
+                title: 'Rotación de Llantas',
+                description: rot.description,
+                meta: { mileage: rot.mileage }
+            }))
+        ];
+
+        return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 }

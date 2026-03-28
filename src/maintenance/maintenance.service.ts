@@ -15,31 +15,70 @@ export class MaintenanceService {
         providerId?: number;
         userId?: number;
         evidenceUrls?: string[];
-        tickets?: { ticketNumber: string; cost: number }[];
+        resolvedFaultIds?: number[];
+        tickets?: { 
+            ticketNumber: string; 
+            cost: number; 
+            items?: { description: string; cost: number }[] 
+        }[];
         parts?: { productId: number; quantity: number; cost: number }[];
     }) {
-        const { evidenceUrls, tickets, parts, ...logData } = data;
-        return this.prisma.maintenance.create({
+        const { evidenceUrls, tickets, parts, resolvedFaultIds, ...logData } = data;
+        
+        return this.prisma.$transaction(async (tx) => {
+            const log = await tx.maintenance.create({
+                data: {
+                    ...logData,
+                    evidence: {
+                        create: evidenceUrls?.map((url) => ({ url })) || [],
+                    },
+                    tickets: {
+                        create: tickets?.map(t => ({
+                            ticketNumber: t.ticketNumber,
+                            cost: t.cost,
+                            items: {
+                                create: t.items?.map(i => ({
+                                    description: i.description,
+                                    cost: i.cost
+                                })) || []
+                            }
+                        })) || []
+                    },
+                    parts: {
+                        create: parts?.map(p => ({
+                            productId: p.productId,
+                            quantity: p.quantity,
+                            unitCost: p.cost,
+                        })) || []
+                    }
+                },
+                include: { evidence: true, tickets: { include: { items: true } }, parts: true },
+            });
+
+            if (resolvedFaultIds && resolvedFaultIds.length > 0) {
+                await tx.fault.updateMany({
+                    where: { id: { in: resolvedFaultIds } },
+                    data: {
+                        status: 'RESOLVED',
+                        resolvedAt: new Date(),
+                        maintenanceId: log.id
+                    }
+                });
+            }
+
+            return log;
+        });
+    }
+
+    async updateLog(id: number, data: any) {
+        // Implement simple update for now, can be expanded for specific items
+        return this.prisma.maintenance.update({
+            where: { id },
             data: {
-                ...logData,
-                evidence: {
-                    create: evidenceUrls?.map((url) => ({ url })) || [],
-                },
-                tickets: {
-                    create: tickets?.map(t => ({
-                        ticketNumber: t.ticketNumber,
-                        cost: t.cost,
-                    })) || []
-                },
-                parts: {
-                    create: parts?.map(p => ({
-                        productId: p.productId,
-                        quantity: p.quantity,
-                        unitCost: p.cost,
-                    })) || []
-                }
+                ...data,
+                date: data.date ? new Date(data.date) : undefined
             },
-            include: { evidence: true, tickets: true, parts: true },
+            include: { tickets: { include: { items: true } }, parts: true, evidence: true }
         });
     }
 

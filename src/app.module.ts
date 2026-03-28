@@ -12,9 +12,25 @@ import { ProductsModule } from './products/products.module';
 import { UsersModule } from './users/users.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
+import { FaultsModule } from './faults/faults.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, CedisModule, VehiclesModule, MaintenanceModule, InventoryModule, ProvidersModule, ProductsModule, UsersModule, AnalyticsModule, CatalogsModule],
+  imports: [
+    PrismaModule, 
+    AuthModule, 
+    CedisModule, 
+    VehiclesModule, 
+    MaintenanceModule, 
+    InventoryModule, 
+    ProvidersModule, 
+    ProductsModule, 
+    UsersModule, 
+    AnalyticsModule, 
+    CatalogsModule, 
+    FaultsModule, 
+    StorageModule
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-    const cedis = await prisma.cedis.findMany();
-    console.log(JSON.stringify(cedis, null, 2));
+    const faults = await (prisma as any).fault.findMany();
+    console.log(JSON.stringify(faults, null, 2));
 }
 
 main()

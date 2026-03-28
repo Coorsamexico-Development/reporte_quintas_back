@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Query, Param, ParseIntPipe } from '@nestjs/common';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
 import { UseGuards } from '@nestjs/common';
@@ -24,12 +24,26 @@ export class MaintenanceController {
             providerId?: number;
             userId?: number;
             evidenceUrls?: string[];
-            tickets?: { ticketNumber: string; cost: number }[];
+            resolvedFaultIds?: number[];
+            tickets?: { 
+                ticketNumber: string; 
+                cost: number; 
+                items?: { description: string; cost: number }[] 
+            }[];
             parts?: { productId: number; quantity: number; cost: number }[];
         },
     ) {
         if (data.date) data.date = new Date(data.date);
         return this.maintenanceService.createLog(data);
+    }
+
+    @Put('log/:id')
+    @Roles('ADMIN')
+    updateLog(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() data: any
+    ) {
+        return this.maintenanceService.updateLog(id, data);
     }
 
     @Get('logs')

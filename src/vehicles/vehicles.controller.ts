@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Param, Put, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { VehiclesService } from './vehicles.service';
-import { VehicleStatus } from '@prisma/client';
+import { VehicleStatus, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -20,8 +20,14 @@ export class VehiclesController {
         return this.vehiclesService.findOne(id);
     }
 
+    @Get(':id/history')
+    @UseGuards(JwtAuthGuard)
+    async getHistory(@Param('id') id: string) {
+        return this.vehiclesService.getVehicleHistory(+id);
+    }
+
     @Post()
-    @Roles('ADMIN')
+    @Roles(Role.ADMIN)
     create(
         @Body()
         data: {
@@ -35,7 +41,7 @@ export class VehiclesController {
     }
 
     @Put(':id')
-    @Roles('ADMIN')
+    @Roles(Role.ADMIN)
     update(
         @Param('id', ParseIntPipe) id: number,
         @Body() data: { plate?: string; truckNumber?: string; status?: VehicleStatus },
@@ -44,11 +50,12 @@ export class VehiclesController {
     }
 
     @Post(':id/move')
-    @Roles('ADMIN')
+    @UseGuards(JwtAuthGuard)
     moveVehicle(
         @Param('id', ParseIntPipe) id: number,
-        @Body() data: { toCedisId: number; userId: number; reason?: string },
+        @Body() data: { toCedisId: number; reason?: string },
+        @Request() req
     ) {
-        return this.vehiclesService.moveVehicle(id, data.toCedisId, data.userId, data.reason);
+        return this.vehiclesService.moveVehicle(id, data.toCedisId, req.user.userId, data.reason);
     }
 }
