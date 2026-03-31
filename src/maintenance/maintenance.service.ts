@@ -33,8 +33,6 @@ export class MaintenanceService {
             const log = await tx.maintenance.create({
                 data: {
                     vehicleId: Number(logData.vehicleId),
-                    odometer: Number(logData.odometer) || 0,
-                    totalCost: Number(logData.totalCost) || 0,
                     description: logData.description || '',
                     date: logData.date ? new Date(logData.date) : new Date(),
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
@@ -136,8 +134,6 @@ export class MaintenanceService {
                 where: { id },
                 data: {
                     vehicleId: rest.vehicleId ? Number(rest.vehicleId) : undefined,
-                    odometer: rest.odometer ? Number(rest.odometer) : undefined,
-                    totalCost: rest.totalCost ? Number(rest.totalCost) : undefined,
                     description: rest.description,
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
