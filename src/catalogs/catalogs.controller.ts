@@ -62,4 +62,22 @@ export class CatalogsController {
     deleteFuelType(@Param('id', ParseIntPipe) id: number) {
         return this.catalogsService.deleteFuelType(id);
     }
+
+    // Maintenance Types
+    @Get('maintenance-types')
+    findAllMaintenanceTypes() {
+        return this.catalogsService.findAllMaintenanceTypes();
+    }
+
+    @Post('maintenance-types')
+    @Roles('ADMIN')
+    createMaintenanceType(@Body('name') name: string) {
+        return this.catalogsService.createMaintenanceType(name);
+    }
+
+    @Delete('maintenance-types/:id')
+    @Roles('ADMIN')
+    deleteMaintenanceType(@Param('id', ParseIntPipe) id: number) {
+        return this.catalogsService.deleteMaintenanceType(id);
+    }
 }

@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
+import { MaintenanceType_OLD, MaintenanceStatus } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 
 @Injectable()
@@ -11,7 +11,7 @@ export class MaintenanceService {
     ) { }
 
     async createLog(data: any, files?: Express.Multer.File[]) {
-        let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, ...logData } = data;
+        let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, maintenanceTypeId, ...logData } = data;
         
         // Parse JSON strings from FormData if necessary
         if (typeof tickets === 'string') tickets = JSON.parse(tickets);
@@ -33,6 +33,7 @@ export class MaintenanceService {
             const log = await tx.maintenance.create({
                 data: {
                     ...logData,
+                    maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     evidence: {
                         create: evidenceUrls?.map((url) => ({ url })) || [],
@@ -87,7 +88,7 @@ export class MaintenanceService {
     }
 
     async updateLog(id: number, data: any, files?: Express.Multer.File[]) {
-        let { scheduledId, evidenceUrls, tickets, parts, resolvedFaultIds, existingEvidence, ...rest } = data;
+        let { scheduledId, evidenceUrls, tickets, parts, resolvedFaultIds, existingEvidence, maintenanceTypeId, ...rest } = data;
         
         // Parse JSON
         if (typeof tickets === 'string') tickets = JSON.parse(tickets);
@@ -111,6 +112,7 @@ export class MaintenanceService {
                 where: { id },
                 data: {
                     ...rest,
+                    maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     date: rest.date ? new Date(rest.date) : undefined,
                     // Handle evidence updates if provided
@@ -177,6 +179,7 @@ export class MaintenanceService {
                 provider: true,
                 user: true,
                 evidence: true,
+                maintenanceType: true,
                 tickets: { include: { items: true } },
             },
             orderBy: { date: 'desc' },

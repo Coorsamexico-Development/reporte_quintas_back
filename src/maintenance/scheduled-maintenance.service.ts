@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
+import { MaintenanceType_OLD, MaintenanceStatus } from '@prisma/client';
 
 @Injectable()
 export class ScheduledMaintenanceService {
@@ -11,15 +11,17 @@ export class ScheduledMaintenanceService {
     title: string;
     description?: string;
     date: Date;
-    type?: MaintenanceType;
+    type?: MaintenanceType_OLD;
+    maintenanceTypeId?: number;
     status?: MaintenanceStatus;
   }) {
     return this.prisma.scheduledMaintenance.create({
       data: {
         ...data,
+        maintenanceTypeId: data.maintenanceTypeId ? +data.maintenanceTypeId : undefined,
         date: new Date(data.date),
       },
-      include: { vehicle: true },
+      include: { vehicle: true, maintenanceType: true },
     });
   }
 
@@ -31,6 +33,7 @@ export class ScheduledMaintenanceService {
       },
       include: {
         vehicle: true,
+        maintenanceType: true,
       },
       orderBy: { date: 'asc' },
     });
@@ -51,6 +54,7 @@ export class ScheduledMaintenanceService {
       where: { id },
       data: {
         ...data,
+        maintenanceTypeId: data.maintenanceTypeId ? +data.maintenanceTypeId : undefined,
         date: data.date ? new Date(data.date) : undefined,
       },
     });
@@ -70,6 +74,7 @@ export class ScheduledMaintenanceService {
       },
       include: {
         vehicle: true,
+        maintenanceType: true,
       },
       orderBy: { date: 'asc' },
     });

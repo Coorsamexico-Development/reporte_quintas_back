@@ -185,9 +185,14 @@ export class AnalyticsService {
             });
 
             const mKey = new Date(m.date).toISOString().slice(0, 7);
-            if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0 };
-            if (m.type === 'PREVENTIVE') monthlyExpenses[mKey].preventive += mTotal;
-            else monthlyExpenses[mKey].corrective += mTotal;
+            if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0, preventiveCount: 0, correctiveCount: 0 };
+            if (m.type === 'PREVENTIVE') {
+                monthlyExpenses[mKey].preventive += mTotal;
+                monthlyExpenses[mKey].preventiveCount++;
+            } else {
+                monthlyExpenses[mKey].corrective += mTotal;
+                monthlyExpenses[mKey].correctiveCount++;
+            }
         });
 
         // Stats by Unit

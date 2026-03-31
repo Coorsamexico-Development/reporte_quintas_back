@@ -61,4 +61,23 @@ export class CatalogsService {
       where: { id }
     });
   }
+
+  // Maintenance Types
+  async findAllMaintenanceTypes() {
+    return this.prisma.maintenanceType.findMany({
+      orderBy: { name: 'asc' }
+    });
+  }
+
+  async createMaintenanceType(name: string) {
+    return this.prisma.maintenanceType.create({
+      data: { name }
+    });
+  }
+
+  async deleteMaintenanceType(id: number) {
+    return this.prisma.maintenanceType.delete({
+      where: { id }
+    });
+  }
 }

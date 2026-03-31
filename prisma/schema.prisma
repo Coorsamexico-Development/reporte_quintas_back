@@ -134,7 +134,8 @@ model VehicleDocumentEvidence {
 model Maintenance {
   id                     Int                   @id @default(autoincrement())
   vehicleId              Int
-  type                   MaintenanceType
+  type                   MaintenanceType_OLD?  @map("type")
+  maintenanceTypeId      Int?                  @map("maintenance_type_id")
   description            String
   date                   DateTime              @default(now())
   userId                 Int?
@@ -146,6 +147,7 @@ model Maintenance {
   scheduledMaintenance   ScheduledMaintenance? @relation(fields: [scheduledMaintenanceId], references: [id])
   user                   User?                 @relation(fields: [userId], references: [id])
   vehicle                Vehicle               @relation(fields: [vehicleId], references: [id])
+  maintenanceType        MaintenanceType?      @relation(fields: [maintenanceTypeId], references: [id])
   evidence               MaintenanceEvidence[]
   parts                  MaintenancePart[]
   tickets                MaintenanceTicket[]
@@ -154,6 +156,7 @@ model Maintenance {
   @@index([userId], map: "Maintenance_userId_fkey")
   @@index([vehicleId], map: "Maintenance_vehicleId_fkey")
   @@index([scheduledMaintenanceId], map: "Maintenance_scheduledMaintenanceId_fkey")
+  @@index([maintenanceTypeId], map: "Maintenance_maintenanceTypeId_fkey")
 }
 
 model MaintenanceTicket {
@@ -211,19 +214,22 @@ model FaultEvidence {
 }
 
 model ScheduledMaintenance {
-  id           Int               @id @default(autoincrement())
-  vehicleId    Int
-  title        String
-  description  String?
-  date         DateTime
-  type         MaintenanceType   @default(PREVENTIVE)
-  status       MaintenanceStatus @default(SCHEDULED)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  maintenances Maintenance[]
-  vehicle      Vehicle           @relation(fields: [vehicleId], references: [id])
+  id                Int               @id @default(autoincrement())
+  vehicleId         Int
+  title             String
+  description       String?
+  date              DateTime
+  type              MaintenanceType_OLD @default(PREVENTIVE) @map("type")
+  maintenanceTypeId Int?                @map("maintenance_type_id")
+  status            MaintenanceStatus   @default(SCHEDULED)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  maintenances      Maintenance[]
+  vehicle           Vehicle             @relation(fields: [vehicleId], references: [id])
+  maintenanceType   MaintenanceType?    @relation(fields: [maintenanceTypeId], references: [id])
 
   @@index([vehicleId], map: "ScheduledMaintenance_vehicleId_fkey")
+  @@index([maintenanceTypeId], map: "ScheduledMaintenance_maintenanceTypeId_fkey")
 }
 
 model MaintenancePart {
@@ -373,7 +379,15 @@ enum FaultStatus {
   RESOLVED
 }
 
-enum MaintenanceType {
+model MaintenanceType {
+  id                    Int                    @id @default(autoincrement())
+  name                  String                 @unique
+  description           String?
+  maintenances          Maintenance[]
+  scheduledMaintenances ScheduledMaintenance[]
+}
+
+enum MaintenanceType_OLD {
   PREVENTIVE
   CORRECTIVE
 }
