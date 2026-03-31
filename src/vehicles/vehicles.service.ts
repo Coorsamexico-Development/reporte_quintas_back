@@ -104,7 +104,13 @@ export class VehiclesService {
             where: { id },
             include: {
                 maintenanceLogs: {
-                    include: { provider: true, user: true, evidence: true, tickets: { include: { items: true } } },
+                    include: { 
+                        provider: true, 
+                        user: true, 
+                        evidence: true, 
+                        tickets: { include: { items: true } },
+                        parts: { include: { product: true } }
+                    },
                     orderBy: { date: 'desc' }
                 },
                 movementHistory: {
@@ -140,7 +146,13 @@ export class VehiclesService {
                 title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
                 description: log.description,
                 user: log.user?.name,
-                meta: { provider: log.provider?.name, status: log.status, tickets: log.tickets },
+                meta: { 
+                    provider: log.provider,
+                    status: log.status, 
+                    tickets: log.tickets,
+                    parts: log.parts,
+                    type: log.type 
+                },
                 evidence: log.evidence.map(e => e.url)
             })),
             ...vehicle.movementHistory.map(mov => ({
