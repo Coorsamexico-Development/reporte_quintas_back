@@ -142,6 +142,10 @@ model Maintenance {
   providerId             Int?
   status                 MaintenanceStatus     @default(SCHEDULED)
   scheduledMaintenanceId Int?
+  odometer              Int?
+  endDate               DateTime?
+  inactiveDays           Int?
+  inactiveHours          Int?
   faultsResolved         Fault[]
   provider               Provider?             @relation(fields: [providerId], references: [id])
   scheduledMaintenance   ScheduledMaintenance? @relation(fields: [scheduledMaintenanceId], references: [id])

@@ -151,7 +151,10 @@ export class VehiclesService {
                     status: log.status, 
                     tickets: log.tickets,
                     parts: log.parts,
-                    type: log.type 
+                    type: log.type,
+                    endDate: log.endDate,
+                    inactiveDays: log.inactiveDays,
+                    inactiveHours: log.inactiveHours
                 },
                 evidence: log.evidence.map(e => e.url)
             })),

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
@@ -72,5 +72,11 @@ export class MaintenanceController {
     ) {
         if (data.date) data.date = new Date(data.date);
         return this.maintenanceService.recordPartExchange(data);
+    }
+
+    @Delete('log/:id')
+    @Roles('ADMIN')
+    deleteLog(@Param('id', ParseIntPipe) id: number) {
+        return this.maintenanceService.deleteLog(id);
     }
 }

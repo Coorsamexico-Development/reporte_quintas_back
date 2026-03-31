@@ -29,13 +29,19 @@ export class MaintenanceService {
             evidenceUrls = uploadedUrls;
         }
         
-        console.log('Final data for Prisma.maintenance.create:', {
-            vehicleId: Number(logData.vehicleId),
-            type: logData.type,
-            description: logData.description,
-            date: logData.date,
-            maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
-        });
+        const startDate = logData.date ? new Date(logData.date) : new Date();
+        const endDate = logData.endDate ? new Date(logData.endDate) : null;
+        
+        let inactiveDays: number | null = null;
+        let inactiveHours: number | null = null;
+
+        if (endDate) {
+            const diffMs = endDate.getTime() - startDate.getTime();
+            if (diffMs > 0) {
+                inactiveDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                inactiveHours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+            }
+        }
 
         return this.prisma.$transaction(async (tx) => {
             const log = await tx.maintenance.create({
@@ -43,7 +49,11 @@ export class MaintenanceService {
                     vehicleId: Number(logData.vehicleId),
                     type: logData.type || 'PREVENTIVE',
                     description: logData.description || '',
-                    date: logData.date ? new Date(logData.date) : new Date(),
+                    date: startDate,
+                    endDate: endDate,
+                    inactiveDays: inactiveDays,
+                    inactiveHours: inactiveHours,
+                    odometer: logData.odometer ? Number(logData.odometer) : undefined,
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     evidence: {
@@ -96,6 +106,12 @@ export class MaintenanceService {
                 include: { evidence: true, tickets: { include: { items: true } }, parts: true },
             });
 
+            // Update Vehicle Status
+            await tx.vehicle.update({
+                where: { id: vehicleId },
+                data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
+            });
+
             if (resolvedFaultIds && resolvedFaultIds.length > 0) {
                 await tx.fault.updateMany({
                     where: { id: { in: resolvedFaultIds } },
@@ -137,6 +153,20 @@ export class MaintenanceService {
             finalEvidenceUrls = [...finalEvidenceUrls, ...uploadedUrls];
         }
         
+        const startDate = rest.date ? new Date(rest.date) : (log?.date || new Date());
+        const endDate = rest.endDate ? new Date(rest.endDate) : null;
+
+        let inactiveDays: number | null = null;
+        let inactiveHours: number | null = null;
+
+        if (endDate) {
+            const diffMs = endDate.getTime() - startDate.getTime();
+            if (diffMs > 0) {
+                inactiveDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                inactiveHours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+            }
+        }
+
         return this.prisma.$transaction(async (tx) => {
             // Update the current maintenance log
             const updated = await tx.maintenance.update({
@@ -146,7 +176,11 @@ export class MaintenanceService {
                     description: rest.description,
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
-                    date: rest.date ? new Date(rest.date) : undefined,
+                    odometer: rest.odometer ? Number(rest.odometer) : undefined,
+                    date: startDate,
+                    endDate: endDate,
+                    inactiveDays: inactiveDays,
+                    inactiveHours: inactiveHours,
                     // Handle evidence updates if provided
                     evidence: {
                         deleteMany: {}, // Simple approach: replace evidence
@@ -192,27 +226,66 @@ export class MaintenanceService {
                 include: { tickets: { include: { items: true } }, parts: true, evidence: true },
             });
 
-            // If a scheduledId is provided, mark it as completed
-            if (scheduledId) {
-                await tx.scheduledMaintenance.update({
-                    where: { id: +scheduledId },
-                    data: { status: 'COMPLETED' },
-                });
-            }
-
-            // Handle faults if provided
-            if (resolvedFaultIds && resolvedFaultIds.length > 0) {
-                await tx.fault.updateMany({
-                    where: { id: { in: resolvedFaultIds } },
-                    data: {
-                        status: 'RESOLVED',
-                        resolvedAt: new Date(),
-                        maintenanceId: id
-                    }
+            // Update Vehicle Status
+            const vId = rest.vehicleId ? Number(rest.vehicleId) : log?.vehicleId;
+            if (vId) {
+                await tx.vehicle.update({
+                    where: { id: vId },
+                    data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
                 });
             }
 
             return updated;
+        });
+    }
+
+    async deleteLog(id: number) {
+        return this.prisma.$transaction(async (tx) => {
+            const log = await tx.maintenance.findUnique({
+                where: { id },
+                include: { tickets: true, parts: true, evidence: true }
+            });
+
+            if (!log) throw new Error('Maintenance log not found');
+
+            // Delete relations manually if needed (Prisma often handles this if onDelete: Cascade is set)
+            // But let's be explicit for certainty
+            await tx.maintenanceTicketItem.deleteMany({
+                where: { ticket: { maintenanceId: id } }
+            });
+            await tx.maintenanceTicket.deleteMany({
+                where: { maintenanceId: id }
+            });
+            await tx.maintenancePart.deleteMany({
+                where: { maintenanceId: id }
+            });
+            await tx.maintenanceEvidence.deleteMany({
+                where: { maintenanceId: id }
+            });
+
+            // Revert faults to pending if they were resolved by this log
+            await tx.fault.updateMany({
+                where: { maintenanceId: id },
+                data: { status: 'PENDING', maintenanceId: null, resolvedAt: null }
+            });
+
+            const deleted = await tx.maintenance.delete({
+                where: { id }
+            });
+
+            // Refresh vehicle status (optional: check if there are other open maintenances)
+            const openMaintenances = await tx.maintenance.count({
+                where: { vehicleId: log.vehicleId, endDate: null }
+            });
+
+            if (openMaintenances === 0) {
+                await tx.vehicle.update({
+                    where: { id: log.vehicleId },
+                    data: { status: 'ACTIVE' }
+                });
+            }
+
+            return deleted;
         });
     }
 
