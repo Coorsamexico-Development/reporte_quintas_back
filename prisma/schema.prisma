@@ -175,11 +175,13 @@ model MaintenanceTicketItem {
   id            Int               @id @default(autoincrement())
   ticketId      Int
   description   String
-  cost          Decimal           @default(0.000000000000000000000000000000)
+  cost          Decimal           @default(0.0)
   affectedParts Int               @default(1)
   hasIva        Boolean           @default(false)
-  laborCost     Decimal           @default(0.000000000000000000000000000000)
+  laborCost     Decimal           @default(0.0)
   repairType    String?
+  maintenanceTypeId Int?
+  maintenanceType   MaintenanceType? @relation(fields: [maintenanceTypeId], references: [id])
   ticket        MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId], map: "MaintenanceTicketItem_ticketId_fkey")
@@ -385,6 +387,7 @@ model MaintenanceType {
   description           String?
   maintenances          Maintenance[]
   scheduledMaintenances ScheduledMaintenance[]
+  ticketItems           MaintenanceTicketItem[]
 }
 
 enum MaintenanceType_OLD {

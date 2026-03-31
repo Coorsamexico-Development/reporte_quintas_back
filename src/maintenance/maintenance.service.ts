@@ -42,16 +42,17 @@ export class MaintenanceService {
                         create: tickets?.map(t => ({
                             ticketNumber: t.ticketNumber,
                             cost: t.cost,
-                            items: {
-                                create: t.items?.map(i => ({
-                                    description: i.description,
-                                    repairType: i.repairType,
-                                    cost: i.cost,
-                                    laborCost: i.laborCost,
-                                    hasIva: i.hasIva === true,
-                                    affectedParts: Number(i.affectedParts) || 1
-                                })) || []
-                            }
+                                    items: {
+                                        create: t.items?.map(i => ({
+                                            description: i.description,
+                                            repairType: i.repairType,
+                                            maintenanceTypeId: i.maintenanceTypeId ? Number(i.maintenanceTypeId) : undefined,
+                                            cost: i.cost,
+                                            laborCost: i.laborCost,
+                                            hasIva: i.hasIva === true,
+                                            affectedParts: Number(i.affectedParts) || 1
+                                        })) || []
+                                    }
                         })) || []
                     },
                     parts: {
@@ -127,16 +128,17 @@ export class MaintenanceService {
                             create: tickets.map((t: any) => ({
                                 ticketNumber: t.ticketNumber,
                                 cost: t.cost,
-                                items: {
-                                    create: t.items?.map((i: any) => ({
-                                        description: i.description,
-                                        repairType: i.repairType,
-                                        cost: i.cost,
-                                        laborCost: i.laborCost,
-                                        hasIva: i.hasIva === true,
-                                        affectedParts: Number(i.affectedParts) || 1
-                                    })) || []
-                                }
+                                        items: {
+                                            create: t.items?.map((i: any) => ({
+                                                description: i.description,
+                                                repairType: i.repairType,
+                                                maintenanceTypeId: i.maintenanceTypeId ? Number(i.maintenanceTypeId) : undefined,
+                                                cost: i.cost,
+                                                laborCost: i.laborCost,
+                                                hasIva: i.hasIva === true,
+                                                affectedParts: Number(i.affectedParts) || 1
+                                            })) || []
+                                        }
                             }))
                         }
                     })
