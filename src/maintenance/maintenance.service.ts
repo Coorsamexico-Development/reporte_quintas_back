@@ -29,10 +29,19 @@ export class MaintenanceService {
             evidenceUrls = uploadedUrls;
         }
         
+        console.log('Final data for Prisma.maintenance.create:', {
+            vehicleId: Number(logData.vehicleId),
+            type: logData.type,
+            description: logData.description,
+            date: logData.date,
+            maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
+        });
+
         return this.prisma.$transaction(async (tx) => {
             const log = await tx.maintenance.create({
                 data: {
                     vehicleId: Number(logData.vehicleId),
+                    type: logData.type || 'PREVENTIVE',
                     description: logData.description || '',
                     date: logData.date ? new Date(logData.date) : new Date(),
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
@@ -65,7 +74,7 @@ export class MaintenanceService {
                             }, 0);
 
                             return {
-                                ticketNumber: t.ticketNumber,
+                                ticketNumber: t.ticketNumber || 'N/A',
                                 cost: tCost,
                                 items: {
                                     create: ticketItems
