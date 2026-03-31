@@ -43,25 +43,32 @@ export class MaintenanceService {
                             ticketNumber: t.ticketNumber,
                             cost: t.cost,
                                     items: {
-                                        create: t.items?.map(i => ({
-                                            description: i.description,
-                                            repairType: i.repairType,
-                                            maintenanceTypeId: i.maintenanceTypeId ? Number(i.maintenanceTypeId) : undefined,
-                                            productId: i.productId ? Number(i.productId) : undefined,
-                                            cost: i.cost,
-                                            laborCost: i.laborCost,
-                                            hasIva: i.hasIva === true,
-                                            affectedParts: Number(i.affectedParts) || 1
-                                        })) || []
+                                        create: t.items?.map(i => {
+                                            const prodId = Number(i.productId);
+                                            const typeId = Number(i.maintenanceTypeId);
+                                            return {
+                                                description: i.description || '',
+                                                repairType: i.repairType,
+                                                maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                                productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                                cost: Number(i.cost) || 0,
+                                                laborCost: Number(i.laborCost) || 0,
+                                                hasIva: i.hasIva === true,
+                                                affectedParts: Number(i.affectedParts) || 1
+                                            };
+                                        }) || []
                                     }
                         })) || []
                     },
                     parts: {
-                        create: parts?.map(p => ({
-                            productId: p.productId,
-                            quantity: p.quantity,
-                            unitCost: p.cost,
-                        })) || []
+                        create: parts?.map(p => {
+                            const pid = Number(p.productId);
+                            return (!isNaN(pid) && pid > 0) ? {
+                                productId: pid,
+                                quantity: Number(p.quantity) || 1,
+                                unitCost: Number(p.cost) || 0,
+                            } : null;
+                        }).filter(Boolean) || []
                     }
                 },
                 include: { evidence: true, tickets: { include: { items: true } }, parts: true },
@@ -130,16 +137,20 @@ export class MaintenanceService {
                                 ticketNumber: t.ticketNumber,
                                 cost: t.cost,
                                         items: {
-                                            create: t.items?.map((i: any) => ({
-                                                description: i.description,
-                                                repairType: i.repairType,
-                                                maintenanceTypeId: i.maintenanceTypeId ? Number(i.maintenanceTypeId) : undefined,
-                                                productId: i.productId ? Number(i.productId) : undefined,
-                                                cost: i.cost,
-                                                laborCost: i.laborCost,
-                                                hasIva: i.hasIva === true,
-                                                affectedParts: Number(i.affectedParts) || 1
-                                            })) || []
+                                            create: t.items?.map((i: any) => {
+                                                const prodId = Number(i.productId);
+                                                const typeId = Number(i.maintenanceTypeId);
+                                                return {
+                                                    description: i.description || '',
+                                                    repairType: i.repairType,
+                                                    maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                                    productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                                    cost: Number(i.cost) || 0,
+                                                    laborCost: Number(i.laborCost) || 0,
+                                                    hasIva: i.hasIva === true,
+                                                    affectedParts: Number(i.affectedParts) || 1
+                                                };
+                                            }) || []
                                         }
                             }))
                         }
