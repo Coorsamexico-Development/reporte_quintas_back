@@ -32,33 +32,48 @@ export class MaintenanceService {
         return this.prisma.$transaction(async (tx) => {
             const log = await tx.maintenance.create({
                 data: {
-                    ...logData,
+                    vehicleId: Number(logData.vehicleId),
+                    odometer: Number(logData.odometer) || 0,
+                    totalCost: Number(logData.totalCost) || 0,
+                    description: logData.description || '',
+                    date: logData.date ? new Date(logData.date) : new Date(),
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     evidence: {
                         create: evidenceUrls?.map((url) => ({ url })) || [],
                     },
                     tickets: {
-                        create: tickets?.map(t => ({
-                            ticketNumber: t.ticketNumber,
-                            cost: t.cost,
-                                    items: {
-                                        create: t.items?.map(i => {
-                                            const prodId = Number(i.productId);
-                                            const typeId = Number(i.maintenanceTypeId);
-                                            return {
-                                                description: i.description || '',
-                                                repairType: i.repairType,
-                                                maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
-                                                productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
-                                                cost: Number(i.cost) || 0,
-                                                laborCost: Number(i.laborCost) || 0,
-                                                hasIva: i.hasIva === true,
-                                                affectedParts: Number(i.affectedParts) || 1
-                                            };
-                                        }) || []
-                                    }
-                        })) || []
+                        create: tickets?.map(t => {
+                            // Calculate ticket cost if missing or use provided
+                            const ticketItems = t.items?.map(i => {
+                                const prodId = Number(i.productId);
+                                const typeId = Number(i.maintenanceTypeId);
+                                return {
+                                    description: i.description || '',
+                                    repairType: i.repairType,
+                                    maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                    productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                    cost: Number(i.cost) || 0,
+                                    laborCost: Number(i.laborCost) || 0,
+                                    hasIva: i.hasIva === true,
+                                    affectedParts: Number(i.affectedParts) || 1
+                                };
+                            }) || [];
+
+                            const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
+                                let total = acc + curr.cost + curr.laborCost;
+                                if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
+                                return total;
+                            }, 0);
+
+                            return {
+                                ticketNumber: t.ticketNumber,
+                                cost: tCost,
+                                items: {
+                                    create: ticketItems
+                                }
+                            };
+                        }) || []
                     },
                     parts: {
                         create: parts?.map(p => {
@@ -120,7 +135,10 @@ export class MaintenanceService {
             const updated = await tx.maintenance.update({
                 where: { id },
                 data: {
-                    ...rest,
+                    vehicleId: rest.vehicleId ? Number(rest.vehicleId) : undefined,
+                    odometer: rest.odometer ? Number(rest.odometer) : undefined,
+                    totalCost: rest.totalCost ? Number(rest.totalCost) : undefined,
+                    description: rest.description,
                     maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
                     scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     date: rest.date ? new Date(rest.date) : undefined,
@@ -133,26 +151,36 @@ export class MaintenanceService {
                     ...(tickets && {
                         tickets: {
                             deleteMany: {}, // Warning: this deletes old ticket items too if not careful
-                            create: tickets.map((t: any) => ({
-                                ticketNumber: t.ticketNumber,
-                                cost: t.cost,
-                                        items: {
-                                            create: t.items?.map((i: any) => {
-                                                const prodId = Number(i.productId);
-                                                const typeId = Number(i.maintenanceTypeId);
-                                                return {
-                                                    description: i.description || '',
-                                                    repairType: i.repairType,
-                                                    maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
-                                                    productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
-                                                    cost: Number(i.cost) || 0,
-                                                    laborCost: Number(i.laborCost) || 0,
-                                                    hasIva: i.hasIva === true,
-                                                    affectedParts: Number(i.affectedParts) || 1
-                                                };
-                                            }) || []
-                                        }
-                            }))
+                            create: tickets.map((t: any) => {
+                                const ticketItems = t.items?.map((i: any) => {
+                                    const prodId = Number(i.productId);
+                                    const typeId = Number(i.maintenanceTypeId);
+                                    return {
+                                        description: i.description || '',
+                                        repairType: i.repairType,
+                                        maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                        productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                        cost: Number(i.cost) || 0,
+                                        laborCost: Number(i.laborCost) || 0,
+                                        hasIva: i.hasIva === true,
+                                        affectedParts: Number(i.affectedParts) || 1
+                                    };
+                                }) || [];
+
+                                const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
+                                    let total = acc + curr.cost + curr.laborCost;
+                                    if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
+                                    return total;
+                                }, 0);
+
+                                return {
+                                    ticketNumber: t.ticketNumber,
+                                    cost: tCost,
+                                    items: {
+                                        create: ticketItems
+                                    }
+                                };
+                            })
                         }
                     })
                 },
