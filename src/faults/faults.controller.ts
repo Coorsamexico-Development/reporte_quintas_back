@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe, UseInterceptors, UploadedFile } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { FaultsService, CreateFaultDto } from './faults.service';
 
 @Controller('faults')
@@ -7,12 +7,12 @@ export class FaultsController {
   constructor(private readonly faultsService: FaultsService) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FilesInterceptor('files'))
   reportFault(
     @Body() createFaultDto: CreateFaultDto,
-    @UploadedFile() file?: Express.Multer.File
+    @UploadedFiles() files?: Express.Multer.File[]
   ) {
-    return this.faultsService.reportFault(createFaultDto, file);
+    return this.faultsService.reportFault(createFaultDto, files);
   }
 
   @Get('vehicle/:id')

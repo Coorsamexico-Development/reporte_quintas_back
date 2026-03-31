@@ -32,7 +32,7 @@ export class VehiclesService {
                     include: { type: true, evidence: true },
                 },
                 maintenanceLogs: {
-                    include: { provider: true, user: true, evidence: true },
+                    include: { provider: true, user: true, evidence: true, tickets: { include: { items: true } } },
                 },
                 movementHistory: {
                     include: { fromCedis: true, toCedis: true, user: true },
@@ -104,7 +104,7 @@ export class VehiclesService {
             where: { id },
             include: {
                 maintenanceLogs: {
-                    include: { provider: true, user: true, evidence: true },
+                    include: { provider: true, user: true, evidence: true, tickets: { include: { items: true } } },
                     orderBy: { date: 'desc' }
                 },
                 movementHistory: {
@@ -121,6 +121,9 @@ export class VehiclesService {
                 },
                 tireRotations: {
                     orderBy: { date: 'desc' }
+                },
+                scheduledMaintenances: {
+                    orderBy: { date: 'desc' }
                 }
             }
         });
@@ -132,11 +135,12 @@ export class VehiclesService {
             ...vehicle.maintenanceLogs.map(log => ({
                 id: `maintenance-${log.id}`,
                 type: 'MAINTENANCE',
+                logId: log.id,
                 date: log.date,
                 title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
                 description: log.description,
                 user: log.user?.name,
-                meta: { provider: log.provider?.name, status: log.status },
+                meta: { provider: log.provider?.name, status: log.status, tickets: log.tickets },
                 evidence: log.evidence.map(e => e.url)
             })),
             ...vehicle.movementHistory.map(mov => ({
@@ -177,7 +181,23 @@ export class VehiclesService {
                 title: 'Rotación de Llantas',
                 description: rot.description,
                 meta: { mileage: rot.mileage }
-            }))
+            })),
+            ...vehicle.scheduledMaintenances.map(sched => ({
+                id: `scheduled-${sched.id}`,
+                type: 'SCHEDULED_MAINTENANCE',
+                date: sched.date,
+                title: 'Programación: ' + (sched.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                description: sched.description,
+                meta: { status: sched.status },
+            })),
+            {
+                id: `alta-${vehicle.id}`,
+                type: 'ALTA',
+                date: vehicle.createdAt,
+                title: 'Alta de Unidad',
+                description: `Ingreso de la unidad ${vehicle.truckNumber} al sistema.`,
+                meta: { plate: vehicle.plate }
+            }
         ];
 
         return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

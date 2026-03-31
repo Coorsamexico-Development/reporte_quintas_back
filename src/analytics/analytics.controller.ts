@@ -14,4 +14,16 @@ export class AnalyticsController {
     async getExpenses() {
         return await this.analyticsService.getExpenses();
     }
+
+    @Get('activity')
+    @Roles('ADMIN', 'OPERATOR') // All authenticated roles can view analytics
+    async getRecentActivity() {
+        return await this.analyticsService.getRecentActivity();
+    }
+
+    @Get('global-summary')
+    @Roles('ADMIN', 'OPERATOR')
+    async getGlobalSummary() {
+        return await this.analyticsService.getGlobalSummary();
+    }
 }

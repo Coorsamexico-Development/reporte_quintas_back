@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Body, Query, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
 import { UseGuards } from '@nestjs/common';
@@ -13,37 +14,25 @@ export class MaintenanceController {
 
     @Post('log')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     createLog(
+        @UploadedFiles() files: Express.Multer.File[],
         @Body()
-        data: {
-            vehicleId: number;
-            type: MaintenanceType;
-            description: string;
-            date: Date;
-            status: MaintenanceStatus;
-            providerId?: number;
-            userId?: number;
-            evidenceUrls?: string[];
-            resolvedFaultIds?: number[];
-            tickets?: { 
-                ticketNumber: string; 
-                cost: number; 
-                items?: { description: string; cost: number }[] 
-            }[];
-            parts?: { productId: number; quantity: number; cost: number }[];
-        },
+        data: any,
     ) {
         if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.createLog(data);
+        return this.maintenanceService.createLog(data, files);
     }
 
     @Put('log/:id')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     updateLog(
         @Param('id', ParseIntPipe) id: number,
+        @UploadedFiles() files: Express.Multer.File[],
         @Body() data: any
     ) {
-        return this.maintenanceService.updateLog(id, data);
+        return this.maintenanceService.updateLog(id, data, files);
     }
 
     @Get('logs')

@@ -15,6 +15,9 @@ import { CatalogsModule } from './catalogs/catalogs.module';
 import { FaultsModule } from './faults/faults.module';
 import { StorageModule } from './storage/storage.module';
 
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+
 @Module({
   imports: [
     PrismaModule, 
@@ -29,7 +32,11 @@ import { StorageModule } from './storage/storage.module';
     AnalyticsModule, 
     CatalogsModule, 
     FaultsModule, 
-    StorageModule
+    StorageModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],

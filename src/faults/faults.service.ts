@@ -5,8 +5,10 @@ import { StorageService } from '../storage/storage.service';
 
 export class CreateFaultDto {
   vehicleId: number;
+  title: string;
   description: string;
   severity: FaultSeverity;
+  scheduledId?: string | number;
 }
 
 @Injectable()
@@ -16,24 +18,37 @@ export class FaultsService {
     private readonly storage: StorageService
   ) {}
 
-  async reportFault(data: CreateFaultDto, file?: Express.Multer.File) {
+  async reportFault(data: CreateFaultDto, files?: Express.Multer.File[]) {
     try {
       const fault = await this.db.fault.create({
         data: {
           vehicleId: Number(data.vehicleId),
+          title: data.title,
           description: data.description,
           severity: data.severity,
           status: FaultStatus.PENDING,
         },
       });
 
-      if (file) {
-        const url = await this.storage.uploadFile(file, 'faults');
-        await this.db.faultEvidence.create({
-          data: {
-            faultId: fault.id,
-            url,
-          },
+      if (files && files.length > 0) {
+        const vehicle = await this.db.vehicle.findUnique({ where: { id: Number(data.vehicleId) } });
+        const truckNumber = vehicle?.truckNumber || 'unknown';
+
+        for (const file of files) {
+          const url = await this.storage.uploadFile(file, `unidades/${truckNumber}/fallas`);
+          await this.db.faultEvidence.create({
+            data: {
+              faultId: fault.id,
+              url,
+            },
+          });
+        }
+      }
+
+      if (data.scheduledId) {
+        await this.db.scheduledMaintenance.update({
+          where: { id: Number(data.scheduledId) },
+          data: { status: 'COMPLETED' },
         });
       }
 

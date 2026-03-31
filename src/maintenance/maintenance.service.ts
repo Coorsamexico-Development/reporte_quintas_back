@@ -1,34 +1,39 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class MaintenanceService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private storage: StorageService
+    ) { }
 
-    async createLog(data: {
-        vehicleId: number;
-        type: MaintenanceType;
-        description: string;
-        date: Date;
-        status: MaintenanceStatus;
-        providerId?: number;
-        userId?: number;
-        evidenceUrls?: string[];
-        resolvedFaultIds?: number[];
-        tickets?: { 
-            ticketNumber: string; 
-            cost: number; 
-            items?: { description: string; cost: number }[] 
-        }[];
-        parts?: { productId: number; quantity: number; cost: number }[];
-    }) {
-        const { evidenceUrls, tickets, parts, resolvedFaultIds, ...logData } = data;
+    async createLog(data: any, files?: Express.Multer.File[]) {
+        let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, ...logData } = data;
+        
+        // Parse JSON strings from FormData if necessary
+        if (typeof tickets === 'string') tickets = JSON.parse(tickets);
+        if (typeof parts === 'string') parts = JSON.parse(parts);
+        if (typeof resolvedFaultIds === 'string') resolvedFaultIds = JSON.parse(resolvedFaultIds);
+
+        const vehicleId = Number(logData.vehicleId);
+        const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
+        const truckNumber = vehicle?.truckNumber || 'unknown';
+
+        if (files && files.length > 0) {
+            const uploadedUrls = await Promise.all(
+                files.map(file => this.storage.uploadFile(file, `unidades/${truckNumber}/mantenimientos`))
+            );
+            evidenceUrls = uploadedUrls;
+        }
         
         return this.prisma.$transaction(async (tx) => {
             const log = await tx.maintenance.create({
                 data: {
                     ...logData,
+                    scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
                     evidence: {
                         create: evidenceUrls?.map((url) => ({ url })) || [],
                     },
@@ -39,7 +44,11 @@ export class MaintenanceService {
                             items: {
                                 create: t.items?.map(i => ({
                                     description: i.description,
-                                    cost: i.cost
+                                    repairType: i.repairType,
+                                    cost: i.cost,
+                                    laborCost: i.laborCost,
+                                    hasIva: i.hasIva === true,
+                                    affectedParts: Number(i.affectedParts) || 1
                                 })) || []
                             }
                         })) || []
@@ -66,19 +75,94 @@ export class MaintenanceService {
                 });
             }
 
+            if (scheduledId) {
+                await tx.scheduledMaintenance.update({
+                    where: { id: +scheduledId },
+                    data: { status: 'COMPLETED' }
+                });
+            }
+
             return log;
         });
     }
 
-    async updateLog(id: number, data: any) {
-        // Implement simple update for now, can be expanded for specific items
-        return this.prisma.maintenance.update({
-            where: { id },
-            data: {
-                ...data,
-                date: data.date ? new Date(data.date) : undefined
-            },
-            include: { tickets: { include: { items: true } }, parts: true, evidence: true }
+    async updateLog(id: number, data: any, files?: Express.Multer.File[]) {
+        let { scheduledId, evidenceUrls, tickets, parts, resolvedFaultIds, existingEvidence, ...rest } = data;
+        
+        // Parse JSON
+        if (typeof tickets === 'string') tickets = JSON.parse(tickets);
+        if (typeof existingEvidence === 'string') existingEvidence = JSON.parse(existingEvidence);
+
+        const log = await this.prisma.maintenance.findUnique({ where: { id }, include: { vehicle: true } });
+        const truckNumber = log?.vehicle?.truckNumber || 'unknown';
+
+        let finalEvidenceUrls = existingEvidence || [];
+
+        if (files && files.length > 0) {
+            const uploadedUrls = await Promise.all(
+                files.map(file => this.storage.uploadFile(file, `unidades/${truckNumber}/mantenimientos`))
+            );
+            finalEvidenceUrls = [...finalEvidenceUrls, ...uploadedUrls];
+        }
+        
+        return this.prisma.$transaction(async (tx) => {
+            // Update the current maintenance log
+            const updated = await tx.maintenance.update({
+                where: { id },
+                data: {
+                    ...rest,
+                    scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
+                    date: rest.date ? new Date(rest.date) : undefined,
+                    // Handle evidence updates if provided
+                    evidence: {
+                        deleteMany: {}, // Simple approach: replace evidence
+                        create: finalEvidenceUrls.map((url: string) => ({ url }))
+                    },
+                    // Handle ticket updates if provided
+                    ...(tickets && {
+                        tickets: {
+                            deleteMany: {}, // Warning: this deletes old ticket items too if not careful
+                            create: tickets.map((t: any) => ({
+                                ticketNumber: t.ticketNumber,
+                                cost: t.cost,
+                                items: {
+                                    create: t.items?.map((i: any) => ({
+                                        description: i.description,
+                                        repairType: i.repairType,
+                                        cost: i.cost,
+                                        laborCost: i.laborCost,
+                                        hasIva: i.hasIva === true,
+                                        affectedParts: Number(i.affectedParts) || 1
+                                    })) || []
+                                }
+                            }))
+                        }
+                    })
+                },
+                include: { tickets: { include: { items: true } }, parts: true, evidence: true },
+            });
+
+            // If a scheduledId is provided, mark it as completed
+            if (scheduledId) {
+                await tx.scheduledMaintenance.update({
+                    where: { id: +scheduledId },
+                    data: { status: 'COMPLETED' },
+                });
+            }
+
+            // Handle faults if provided
+            if (resolvedFaultIds && resolvedFaultIds.length > 0) {
+                await tx.fault.updateMany({
+                    where: { id: { in: resolvedFaultIds } },
+                    data: {
+                        status: 'RESOLVED',
+                        resolvedAt: new Date(),
+                        maintenanceId: id
+                    }
+                });
+            }
+
+            return updated;
         });
     }
 
@@ -93,6 +177,7 @@ export class MaintenanceService {
                 provider: true,
                 user: true,
                 evidence: true,
+                tickets: { include: { items: true } },
             },
             orderBy: { date: 'desc' },
         });
