@@ -181,7 +181,9 @@ model MaintenanceTicketItem {
   laborCost     Decimal           @default(0.0)
   repairType    String?
   maintenanceTypeId Int?
+  productId     Int?
   maintenanceType   MaintenanceType? @relation(fields: [maintenanceTypeId], references: [id])
+  product           Product?          @relation(fields: [productId], references: [id])
   ticket        MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId], map: "MaintenanceTicketItem_ticketId_fkey")
@@ -279,6 +281,7 @@ model Product {
   stock            InventoryStock[]
   maintenanceParts MaintenancePart[]
   partExchanges    PartExchange[]
+  ticketItems      MaintenanceTicketItem[]
 }
 
 model InventoryStock {
