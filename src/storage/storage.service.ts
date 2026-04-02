@@ -10,13 +10,13 @@ export class StorageService {
     private bucketName: string | null = null;
 
     constructor() {
-        if (process.env.STORAGE_TYPE === 'GCS') {
+        if (process.env.STORAGE_TYPE === 'GCS' || process.env.GCS_BUCKET_NAME) {
             this.gcsStorage = new Storage();
             this.bucketName = process.env.GCS_BUCKET_NAME || 'reporte_quintas';
-            console.log('Using Google Cloud Storage: ', this.bucketName);
+            console.log('✅ GCS Storage Enabled:', this.bucketName);
         } else {
             this.ensureUploadDir();
-            console.log('Using Local Storage in /uploads');
+            console.log('📂 Local Storage Enabled in /uploads');
         }
     }
 
