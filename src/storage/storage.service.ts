@@ -67,13 +67,36 @@ export class StorageService {
         }
     }
 
-    async deleteFile(url: string): Promise<void> {
-        // Lógica de borrado si es necesaria
+    async getViewUrl(url: string | null): Promise<string> {
+        if (!url) return '';
         if (this.gcsStorage && this.bucketName && url.includes('storage.googleapis.com')) {
+            try {
+                const urlParts = url.split(`${this.bucketName}/`);
+                if (urlParts.length > 1) {
+                    const filePath = urlParts[1];
+                    const [signedUrl] = await this.gcsStorage
+                        .bucket(this.bucketName)
+                        .file(filePath)
+                        .getSignedUrl({
+                            version: 'v4',
+                            action: 'read',
+                            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+                        });
+                    return signedUrl;
+                }
+            } catch (e) {
+                console.error('Error signing URL:', e);
+            }
+        }
+        return url;
+    }
+
+    async deleteFile(url: string): Promise<void> {
+        if (this.gcsStorage && this.bucketName && (url.includes('storage.googleapis.com') || url.includes('storage.cloud.google.com'))) {
             try {
                 const parts = url.split(`${this.bucketName}/`);
                 if (parts.length > 1) {
-                    const filePath = parts[1];
+                    const filePath = parts[1].split('?')[0]; // Remove query params if it's a signed URL
                     await this.gcsStorage.bucket(this.bucketName).file(filePath).delete();
                 }
             } catch (e) {

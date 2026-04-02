@@ -130,7 +130,16 @@ export class MaintenanceService {
                 });
             }
 
-            return log;
+            const result = { ...log };
+            if (result.evidence) {
+                result.evidence = await Promise.all(
+                    result.evidence.map(async (e: any) => ({
+                        ...e,
+                        url: await this.storage.getViewUrl(e.url)
+                    }))
+                );
+            }
+            return result;
         });
     }
 
@@ -235,7 +244,16 @@ export class MaintenanceService {
                 });
             }
 
-            return updated;
+            const result = { ...updated };
+            if (result.evidence) {
+                result.evidence = await Promise.all(
+                    result.evidence.map(async (e: any) => ({
+                        ...e,
+                        url: await this.storage.getViewUrl(e.url)
+                    }))
+                );
+            }
+            return result;
         });
     }
 
@@ -290,7 +308,7 @@ export class MaintenanceService {
     }
 
     async getLogs(vehicleId?: number, providerId?: number) {
-        return this.prisma.maintenance.findMany({
+        const logs = await this.prisma.maintenance.findMany({
             where: {
                 vehicleId: vehicleId ? +vehicleId : undefined,
                 providerId: providerId ? +providerId : undefined,
@@ -305,6 +323,19 @@ export class MaintenanceService {
             },
             orderBy: { date: 'desc' },
         });
+
+        // Sign URLs
+        return Promise.all(logs.map(async (log) => {
+            if (log.evidence) {
+                log.evidence = await Promise.all(
+                    log.evidence.map(async (e) => ({
+                        ...e,
+                        url: await this.storage.getViewUrl(e.url)
+                    }))
+                );
+            }
+            return log;
+        }));
     }
 
     async recordTireRotation(data: {

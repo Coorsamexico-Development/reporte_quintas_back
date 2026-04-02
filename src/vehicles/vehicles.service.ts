@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { VehicleStatus } from '@prisma/client';
 
 @Injectable()
 export class VehiclesService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private storageService: StorageService
+    ) { }
 
     async findAll() {
         return this.prisma.vehicle.findMany({
@@ -47,6 +51,34 @@ export class VehiclesService {
         });
 
         if (!vehicle) throw new NotFoundException('Vehicle not found');
+
+        // Sign URLs
+        if (vehicle.maintenanceLogs) {
+            for (const log of vehicle.maintenanceLogs) {
+                if (log.evidence) {
+                    log.evidence = await Promise.all(
+                        log.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
+        if (vehicle.documents) {
+            for (const doc of vehicle.documents) {
+                if (doc.evidence) {
+                    doc.evidence = await Promise.all(
+                        doc.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
         return vehicle;
     }
 
@@ -137,7 +169,7 @@ export class VehiclesService {
         if (!vehicle) throw new NotFoundException('Vehicle not found');
 
         // Map and sort all events into a single timeline
-        const events: any[] = [
+        const rawEvents: any[] = [
             ...vehicle.maintenanceLogs.map(log => ({
                 id: `maintenance-${log.id}`,
                 type: 'MAINTENANCE',
@@ -214,6 +246,19 @@ export class VehiclesService {
                 meta: { plate: vehicle.plate }
             }
         ];
+
+        // Ensure all evidence URLs are signed/authorized for view
+        const events = await Promise.all(
+            rawEvents.map(async (event) => {
+                if (event.evidence && event.evidence.length > 0) {
+                    const signedEvidence = await Promise.all(
+                        event.evidence.map((url: string) => this.storageService.getViewUrl(url))
+                    );
+                    return { ...event, evidence: signedEvidence };
+                }
+                return event;
+            })
+        );
 
         return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
