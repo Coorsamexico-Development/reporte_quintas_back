@@ -69,11 +69,18 @@ export class StorageService {
 
     async getViewUrl(url: string | null): Promise<string> {
         if (!url) return '';
-        if (this.gcsStorage && this.bucketName && url.includes('storage.googleapis.com')) {
+        
+        const isGcsUrl = url.includes('storage.googleapis.com') || url.includes('storage.cloud.google.com');
+        
+        if (this.gcsStorage && this.bucketName && isGcsUrl) {
             try {
-                const urlParts = url.split(`${this.bucketName}/`);
-                if (urlParts.length > 1) {
-                    const filePath = urlParts[1];
+                // Extraer el path del archivo manejando diferentes formatos de URL de Google
+                let filePath = '';
+                if (url.includes(`${this.bucketName}/`)) {
+                    filePath = url.split(`${this.bucketName}/`)[1].split('?')[0];
+                }
+
+                if (filePath) {
                     const [signedUrl] = await this.gcsStorage
                         .bucket(this.bucketName)
                         .file(filePath)
@@ -85,18 +92,20 @@ export class StorageService {
                     return signedUrl;
                 }
             } catch (e) {
-                console.error('Error signing URL:', e);
+                console.error('Error signing GCS URL:', e);
             }
         }
         return url;
     }
 
     async deleteFile(url: string): Promise<void> {
-        if (this.gcsStorage && this.bucketName && (url.includes('storage.googleapis.com') || url.includes('storage.cloud.google.com'))) {
+        const isGcsUrl = url.includes('storage.googleapis.com') || url.includes('storage.cloud.google.com');
+
+        if (this.gcsStorage && this.bucketName && isGcsUrl) {
             try {
-                const parts = url.split(`${this.bucketName}/`);
-                if (parts.length > 1) {
-                    const filePath = parts[1].split('?')[0]; // Remove query params if it's a signed URL
+                const urlParts = url.split(`${this.bucketName}/`);
+                if (urlParts.length > 1) {
+                    const filePath = urlParts[1].split('?')[0];
                     await this.gcsStorage.bucket(this.bucketName).file(filePath).delete();
                 }
             } catch (e) {
