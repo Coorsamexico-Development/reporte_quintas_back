@@ -20,9 +20,15 @@ export class FaultsService {
 
   async reportFault(data: CreateFaultDto, files?: Express.Multer.File[]) {
     try {
+      const vId = Number(data.vehicleId);
+      const vehicle = await this.db.vehicle.findUnique({ where: { id: vId } });
+      if (!vehicle) {
+        throw new Error(`El vehículo con ID ${vId} no existe`);
+      }
+
       const fault = await this.db.fault.create({
         data: {
-          vehicleId: Number(data.vehicleId),
+          vehicleId: vId,
           title: data.title,
           description: data.description,
           severity: data.severity,
@@ -31,8 +37,7 @@ export class FaultsService {
       });
 
       if (files && files.length > 0) {
-        const vehicle = await this.db.vehicle.findUnique({ where: { id: Number(data.vehicleId) } });
-        const truckNumber = vehicle?.truckNumber || 'unknown';
+        const truckNumber = vehicle.truckNumber || 'unknown';
 
         for (const file of files) {
           const url = await this.storage.uploadFile(file, `unidades/${truckNumber}/fallas`);
@@ -53,9 +58,11 @@ export class FaultsService {
       }
 
       return fault;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reporting fault:', error);
-      throw new InternalServerErrorException('Failed to report fault');
+      throw new InternalServerErrorException(
+        error.message ? `Error al reportar falla: ${error.message}` : 'Error interno al reportar la falla'
+      );
     }
   }
 
