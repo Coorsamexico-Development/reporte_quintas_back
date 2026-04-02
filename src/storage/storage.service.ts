@@ -31,12 +31,14 @@ export class StorageService {
     async uploadFile(file: Express.Multer.File, folder: string = 'general'): Promise<string> {
         try {
             const fileName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
+            // Sanitize folder path (replace spaces and other chars)
+            const sanitizedFolder = folder.replace(/[^a-zA-Z0-9/._-]/g, '_');
             
             // Si estamos en GCS
             if (this.gcsStorage && this.bucketName) {
                 const bucket = this.gcsStorage.bucket(this.bucketName);
                 // La ruta en GCS incluye el folder: folder/fileName
-                const gcsFile = bucket.file(`${folder}/${fileName}`);
+                const gcsFile = bucket.file(`${sanitizedFolder}/${fileName}`);
 
                 await gcsFile.save(file.buffer, {
                     metadata: {
@@ -46,18 +48,18 @@ export class StorageService {
                 });
 
                 // Devolver URL pública de GCS (asumiendo que el bucket tiene acceso público de lectura)
-                return `https://storage.googleapis.com/${this.bucketName}/${folder}/${fileName}`;
+                return `https://storage.googleapis.com/${this.bucketName}/${sanitizedFolder}/${fileName}`;
             } 
             
             // Si estamos en Local
             else {
-                const targetFolder = join(this.uploadDir, folder);
+                const targetFolder = join(this.uploadDir, sanitizedFolder);
                 await fs.mkdir(targetFolder, { recursive: true });
                 
                 const filePath = join(targetFolder, fileName);
                 await fs.writeFile(filePath, file.buffer);
                 
-                return `/uploads/${folder}/${fileName}`;
+                return `/uploads/${sanitizedFolder}/${fileName}`;
             }
         } catch (error) {
             console.error('File upload error:', error);
