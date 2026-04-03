@@ -91,7 +91,7 @@ model VehicleMovement {
 model VehicleMovementEvidence {
   id         Int             @id @default(autoincrement())
   movementId Int
-  url        String
+  url        String          @db.Text
   createdAt  DateTime        @default(now())
   movement   VehicleMovement @relation(fields: [movementId], references: [id])
 
@@ -124,7 +124,7 @@ model VehicleDocument {
 model VehicleDocumentEvidence {
   id         Int             @id @default(autoincrement())
   documentId Int
-  url        String
+  url        String          @db.Text
   createdAt  DateTime        @default(now())
   document   VehicleDocument @relation(fields: [documentId], references: [id])
 
@@ -214,7 +214,7 @@ model Fault {
 model FaultEvidence {
   id        Int      @id @default(autoincrement())
   faultId   Int
-  url       String
+  url       String          @db.Text
   createdAt DateTime @default(now())
   fault     Fault    @relation(fields: [faultId], references: [id])
 
@@ -256,7 +256,7 @@ model MaintenancePart {
 model MaintenanceEvidence {
   id            Int         @id @default(autoincrement())
   maintenanceId Int
-  url           String
+  url           String      @db.Text
   createdAt     DateTime    @default(now())
   maintenance   Maintenance @relation(fields: [maintenanceId], references: [id])
 
@@ -324,7 +324,7 @@ model InventoryMovement {
 model InventoryMovementEvidence {
   id         Int               @id @default(autoincrement())
   movementId Int
-  url        String
+  url        String          @db.Text
   createdAt  DateTime          @default(now())
   movement   InventoryMovement @relation(fields: [movementId], references: [id])
 

@@ -171,7 +171,11 @@ export class MaintenanceService {
         const log = await this.prisma.maintenance.findUnique({ where: { id }, include: { vehicle: true } });
         const truckNumber = log?.vehicle?.truckNumber || 'unknown';
 
-        let finalEvidenceUrls = Array.isArray(existingEvidence) ? existingEvidence : [];
+        let finalEvidenceUrls = (Array.isArray(existingEvidence) ? existingEvidence : []).map((url: any) => {
+            if (typeof url === 'string') return url.split('?')[0];
+            if (url && typeof url.url === 'string') return url.url.split('?')[0];
+            return url;
+        });
 
         if (files && files.length > 0) {
             const uploadedUrls = await Promise.all(
