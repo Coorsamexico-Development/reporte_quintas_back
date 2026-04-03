@@ -92,7 +92,7 @@ export class StorageService {
                     return signedUrl;
                 }
             } catch (e) {
-                console.error('Error signing GCS URL:', e);
+                console.error(`❌ Error signing GCS URL for ${url}:`, e.message || e);
             }
         }
         return url;
