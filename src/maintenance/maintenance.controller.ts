@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles, Req } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
@@ -17,11 +17,11 @@ export class MaintenanceController {
     @UseInterceptors(FilesInterceptor('evidence'))
     createLog(
         @UploadedFiles() files: Express.Multer.File[],
-        @Body()
-        data: any,
+        @Body() data: any,
+        @Req() req: any
     ) {
         if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.createLog(data, files);
+        return this.maintenanceService.createLog(data, files, req.user?.id);
     }
 
     @Put('log/:id')

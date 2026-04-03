@@ -10,15 +10,23 @@ export class MaintenanceService {
         private storage: StorageService
     ) { }
 
-    async createLog(data: any, files?: Express.Multer.File[]) {
-        let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, maintenanceTypeId, ...logData } = data;
+    async createLog(data: any, files?: Express.Multer.File[], userId?: number) {
+        let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, maintenanceTypeId, providerId, ...logData } = data;
         
         // Parse JSON strings from FormData if necessary
-        if (typeof tickets === 'string') tickets = JSON.parse(tickets);
-        if (typeof parts === 'string') parts = JSON.parse(parts);
-        if (typeof resolvedFaultIds === 'string') resolvedFaultIds = JSON.parse(resolvedFaultIds);
+        try {
+            if (typeof tickets === 'string') tickets = JSON.parse(tickets);
+            if (typeof parts === 'string') parts = JSON.parse(parts);
+            if (typeof resolvedFaultIds === 'string') resolvedFaultIds = JSON.parse(resolvedFaultIds);
+        } catch (e) {
+            console.error('Error parsing JSON from FormData:', e);
+        }
 
         const vehicleId = Number(logData.vehicleId);
+        if (isNaN(vehicleId)) {
+            throw new Error('ID de vehículo inválido');
+        }
+
         const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
         const truckNumber = vehicle?.truckNumber || 'unknown';
 
@@ -43,117 +51,127 @@ export class MaintenanceService {
             }
         }
 
-        return this.prisma.$transaction(async (tx) => {
-            const log = await tx.maintenance.create({
-                data: {
-                    vehicleId: Number(logData.vehicleId),
-                    type: logData.type || 'PREVENTIVE',
-                    description: logData.description || '',
-                    date: startDate,
-                    endDate: endDate,
-                    inactiveDays: inactiveDays,
-                    inactiveHours: inactiveHours,
-                    odometer: logData.odometer ? Number(logData.odometer) : undefined,
-                    maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
-                    scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
-                    evidence: {
-                        create: evidenceUrls?.map((url) => ({ url })) || [],
-                    },
-                    tickets: {
-                        create: tickets?.map(t => {
-                            // Calculate ticket cost if missing or use provided
-                            const ticketItems = t.items?.map(i => {
-                                const prodId = Number(i.productId);
-                                const typeId = Number(i.maintenanceTypeId);
-                                return {
-                                    description: i.description || '',
-                                    repairType: i.repairType,
-                                    maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
-                                    productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
-                                    cost: Number(i.cost) || 0,
-                                    laborCost: Number(i.laborCost) || 0,
-                                    hasIva: i.hasIva === true,
-                                    affectedParts: Number(i.affectedParts) || 1
-                                };
-                            }) || [];
-
-                            const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
-                                let total = acc + curr.cost + curr.laborCost;
-                                if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
-                                return total;
-                            }, 0);
-
-                            return {
-                                ticketNumber: t.ticketNumber || 'N/A',
-                                cost: tCost,
-                                items: {
-                                    create: ticketItems
-                                }
-                            };
-                        }) || []
-                    },
-                    parts: {
-                        create: parts?.map(p => {
-                            const pid = Number(p.productId);
-                            return (!isNaN(pid) && pid > 0) ? {
-                                productId: pid,
-                                quantity: Number(p.quantity) || 1,
-                                unitCost: Number(p.cost) || 0,
-                            } : null;
-                        }).filter(Boolean) || []
-                    }
-                },
-                include: { evidence: true, tickets: { include: { items: true } }, parts: true },
-            });
-
-            // Update Vehicle Status
-            await tx.vehicle.update({
-                where: { id: vehicleId },
-                data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
-            });
-
-            if (resolvedFaultIds && resolvedFaultIds.length > 0) {
-                await tx.fault.updateMany({
-                    where: { id: { in: resolvedFaultIds } },
+        try {
+            return await this.prisma.$transaction(async (tx) => {
+                const log = await tx.maintenance.create({
                     data: {
-                        status: 'RESOLVED',
-                        resolvedAt: new Date(),
-                        maintenanceId: log.id
-                    }
-                });
-            }
+                        vehicleId: vehicleId,
+                        userId: userId ? Number(userId) : undefined,
+                        providerId: providerId ? Number(providerId) : undefined,
+                        type: logData.type || 'PREVENTIVE',
+                        description: logData.description || '',
+                        date: startDate,
+                        endDate: endDate,
+                        inactiveDays: inactiveDays,
+                        inactiveHours: inactiveHours,
+                        odometer: logData.odometer ? Number(logData.odometer) : undefined,
+                        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
+                        scheduledMaintenanceId: (scheduledId && scheduledId !== 'null') ? +scheduledId : undefined,
+                        evidence: {
+                            create: (Array.isArray(evidenceUrls) ? evidenceUrls : []).map((url) => ({ url })),
+                        },
+                        tickets: {
+                            create: tickets?.map(t => {
+                                const ticketItems = t.items?.map(i => {
+                                    const prodId = Number(i.productId);
+                                    const typeId = Number(i.maintenanceTypeId);
+                                    return {
+                                        description: i.description || '',
+                                        repairType: i.repairType,
+                                        maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                        productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                        cost: Number(i.cost) || 0,
+                                        laborCost: Number(i.laborCost) || 0,
+                                        hasIva: i.hasIva === true,
+                                        affectedParts: Number(i.affectedParts) || 1
+                                    };
+                                }) || [];
 
-            if (scheduledId) {
-                await tx.scheduledMaintenance.update({
-                    where: { id: +scheduledId },
-                    data: { status: 'COMPLETED' }
-                });
-            }
+                                const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
+                                    let total = acc + curr.cost + curr.laborCost;
+                                    if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
+                                    return total;
+                                }, 0);
 
-            const result = { ...log };
-            if (result.evidence) {
-                result.evidence = await Promise.all(
-                    result.evidence.map(async (e: any) => ({
-                        ...e,
-                        url: await this.storage.getViewUrl(e.url)
-                    }))
-                );
-            }
-            return result;
-        });
+                                return {
+                                    ticketNumber: t.ticketNumber || 'N/A',
+                                    cost: tCost,
+                                    items: {
+                                        create: ticketItems
+                                    }
+                                };
+                            }) || []
+                        },
+                        parts: {
+                            create: parts?.map(p => {
+                                const pid = Number(p.productId);
+                                return (!isNaN(pid) && pid > 0) ? {
+                                    productId: pid,
+                                    quantity: Number(p.quantity) || 1,
+                                    unitCost: Number(p.cost) || 0,
+                                } : null;
+                            }).filter(Boolean) || []
+                        }
+                    },
+                    include: { evidence: true, tickets: { include: { items: true } }, parts: true },
+                });
+
+                // Update Vehicle Status
+                await tx.vehicle.update({
+                    where: { id: vehicleId },
+                    data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
+                });
+
+                if (resolvedFaultIds && Array.isArray(resolvedFaultIds) && resolvedFaultIds.length > 0) {
+                    await tx.fault.updateMany({
+                        where: { id: { in: resolvedFaultIds.map(Number) } },
+                        data: {
+                            status: 'RESOLVED',
+                            resolvedAt: new Date(),
+                            maintenanceId: log.id
+                        }
+                    });
+                }
+
+                if (scheduledId && scheduledId !== 'null') {
+                    await tx.scheduledMaintenance.update({
+                        where: { id: +scheduledId },
+                        data: { status: 'COMPLETED' }
+                    });
+                }
+
+                const result = { ...log };
+                if (result.evidence) {
+                    result.evidence = await Promise.all(
+                        result.evidence.map(async (e: any) => ({
+                            ...e,
+                            url: await this.storage.getViewUrl(e.url)
+                        }))
+                    );
+                }
+                return result;
+            });
+        } catch (error) {
+            console.error('❌ Error in createLog transaction:', error);
+            throw new InternalServerErrorException(error.message || 'Error al guardar el registro de mantenimiento');
+        }
     }
 
     async updateLog(id: number, data: any, files?: Express.Multer.File[]) {
-        let { scheduledId, evidenceUrls, tickets, parts, resolvedFaultIds, existingEvidence, maintenanceTypeId, ...rest } = data;
+        let { scheduledId, evidenceUrls, tickets, parts, resolvedFaultIds, existingEvidence, maintenanceTypeId, providerId, ...rest } = data;
         
         // Parse JSON
-        if (typeof tickets === 'string') tickets = JSON.parse(tickets);
-        if (typeof existingEvidence === 'string') existingEvidence = JSON.parse(existingEvidence);
+        try {
+            if (typeof tickets === 'string') tickets = JSON.parse(tickets);
+            if (typeof existingEvidence === 'string') existingEvidence = JSON.parse(existingEvidence);
+        } catch (e) {
+            console.error('Error parsing JSON from FormData in updateLog:', e);
+        }
 
         const log = await this.prisma.maintenance.findUnique({ where: { id }, include: { vehicle: true } });
         const truckNumber = log?.vehicle?.truckNumber || 'unknown';
 
-        let finalEvidenceUrls = existingEvidence || [];
+        let finalEvidenceUrls = Array.isArray(existingEvidence) ? existingEvidence : [];
 
         if (files && files.length > 0) {
             const uploadedUrls = await Promise.all(
@@ -176,85 +194,91 @@ export class MaintenanceService {
             }
         }
 
-        return this.prisma.$transaction(async (tx) => {
-            // Update the current maintenance log
-            const updated = await tx.maintenance.update({
-                where: { id },
-                data: {
-                    vehicleId: rest.vehicleId ? Number(rest.vehicleId) : undefined,
-                    description: rest.description,
-                    maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
-                    scheduledMaintenanceId: scheduledId ? +scheduledId : undefined,
-                    odometer: rest.odometer ? Number(rest.odometer) : undefined,
-                    date: startDate,
-                    endDate: endDate,
-                    inactiveDays: inactiveDays,
-                    inactiveHours: inactiveHours,
-                    // Handle evidence updates if provided
-                    evidence: {
-                        deleteMany: {}, // Simple approach: replace evidence
-                        create: finalEvidenceUrls.map((url: string) => ({ url }))
-                    },
-                    // Handle ticket updates if provided
-                    ...(tickets && {
-                        tickets: {
-                            deleteMany: {}, // Warning: this deletes old ticket items too if not careful
-                            create: tickets.map((t: any) => {
-                                const ticketItems = t.items?.map((i: any) => {
-                                    const prodId = Number(i.productId);
-                                    const typeId = Number(i.maintenanceTypeId);
+        try {
+            return await this.prisma.$transaction(async (tx) => {
+                // Update the current maintenance log
+                const updated = await tx.maintenance.update({
+                    where: { id },
+                    data: {
+                        vehicleId: rest.vehicleId ? Number(rest.vehicleId) : undefined,
+                        providerId: providerId ? Number(providerId) : undefined,
+                        description: rest.description,
+                        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
+                        scheduledMaintenanceId: (scheduledId && scheduledId !== 'null') ? +scheduledId : undefined,
+                        odometer: rest.odometer ? Number(rest.odometer) : undefined,
+                        date: startDate,
+                        endDate: endDate,
+                        inactiveDays: inactiveDays,
+                        inactiveHours: inactiveHours,
+                        // Handle evidence updates if provided
+                        evidence: {
+                            deleteMany: {}, // Simple approach: replace evidence
+                            create: finalEvidenceUrls.map((url: string) => ({ url }))
+                        },
+                        // Handle ticket updates if provided
+                        ...(tickets && {
+                            tickets: {
+                                deleteMany: {}, // Warning: this deletes old ticket items too if not careful
+                                create: tickets.map((t: any) => {
+                                    const ticketItems = t.items?.map((i: any) => {
+                                        const prodId = Number(i.productId);
+                                        const typeId = Number(i.maintenanceTypeId);
+                                        return {
+                                            description: i.description || '',
+                                            repairType: i.repairType,
+                                            maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
+                                            productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
+                                            cost: Number(i.cost) || 0,
+                                            laborCost: Number(i.laborCost) || 0,
+                                            hasIva: i.hasIva === true,
+                                            affectedParts: Number(i.affectedParts) || 1
+                                        };
+                                    }) || [];
+
+                                    const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
+                                        let total = acc + curr.cost + curr.laborCost;
+                                        if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
+                                        return total;
+                                    }, 0);
+
                                     return {
-                                        description: i.description || '',
-                                        repairType: i.repairType,
-                                        maintenanceTypeId: (!isNaN(typeId) && typeId > 0) ? typeId : undefined,
-                                        productId: (!isNaN(prodId) && prodId > 0) ? prodId : undefined,
-                                        cost: Number(i.cost) || 0,
-                                        laborCost: Number(i.laborCost) || 0,
-                                        hasIva: i.hasIva === true,
-                                        affectedParts: Number(i.affectedParts) || 1
+                                        ticketNumber: t.ticketNumber,
+                                        cost: tCost,
+                                        items: {
+                                            create: ticketItems
+                                        }
                                     };
-                                }) || [];
-
-                                const tCost = Number(t.cost) || ticketItems.reduce((acc, curr) => {
-                                    let total = acc + curr.cost + curr.laborCost;
-                                    if (curr.hasIva) total += (curr.cost + curr.laborCost) * 0.16;
-                                    return total;
-                                }, 0);
-
-                                return {
-                                    ticketNumber: t.ticketNumber,
-                                    cost: tCost,
-                                    items: {
-                                        create: ticketItems
-                                    }
-                                };
-                            })
-                        }
-                    })
-                },
-                include: { tickets: { include: { items: true } }, parts: true, evidence: true },
-            });
-
-            // Update Vehicle Status
-            const vId = rest.vehicleId ? Number(rest.vehicleId) : log?.vehicleId;
-            if (vId) {
-                await tx.vehicle.update({
-                    where: { id: vId },
-                    data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
+                                })
+                            }
+                        })
+                    },
+                    include: { tickets: { include: { items: true } }, parts: true, evidence: true },
                 });
-            }
 
-            const result = { ...updated };
-            if (result.evidence) {
-                result.evidence = await Promise.all(
-                    result.evidence.map(async (e: any) => ({
-                        ...e,
-                        url: await this.storage.getViewUrl(e.url)
-                    }))
-                );
-            }
-            return result;
-        });
+                // Update Vehicle Status
+                const vId = rest.vehicleId ? Number(rest.vehicleId) : log?.vehicleId;
+                if (vId) {
+                    await tx.vehicle.update({
+                        where: { id: vId },
+                        data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
+                    });
+                }
+
+                const result = { ...updated };
+                if (result.evidence) {
+                    result.evidence = await Promise.all(
+                        result.evidence.map(async (e: any) => ({
+                            ...e,
+                            url: await this.storage.getViewUrl(e.url)
+                        }))
+                    );
+                }
+                return result;
+            });
+        } catch (error) {
+            console.error('❌ Error in updateLog transaction:', error);
+            throw new InternalServerErrorException(error.message || 'Error al actualizar el registro de mantenimiento');
+        }
     }
 
     async deleteLog(id: number) {
