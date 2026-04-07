@@ -75,7 +75,7 @@ model VehicleMovement {
   toCedisId   Int
   date        DateTime                  @default(now())
   userId      Int
-  reason      String?
+  reason      String?                   @db.Text
   fromCedis   Cedis?                    @relation("FromCedis", fields: [fromCedisId], references: [id])
   toCedis     Cedis                     @relation("ToCedis", fields: [toCedisId], references: [id])
   user        User                      @relation(fields: [userId], references: [id])
@@ -136,7 +136,7 @@ model Maintenance {
   vehicleId              Int
   type                   MaintenanceType_OLD?  @map("type")
   maintenanceTypeId      Int?                  @map("maintenance_type_id")
-  description            String
+  description            String                @db.Text
   date                   DateTime              @default(now())
   userId                 Int?
   providerId             Int?
@@ -310,7 +310,7 @@ model InventoryMovement {
   totalCost Decimal?
   date      DateTime                    @default(now())
   userId    Int?
-  notes     String?
+  notes     String?                     @db.Text
   cedis     Cedis                       @relation(fields: [cedisId], references: [id])
   product   Product                     @relation(fields: [productId], references: [id])
   user      User?                       @relation(fields: [userId], references: [id])
@@ -335,7 +335,7 @@ model TireRotation {
   id          Int      @id @default(autoincrement())
   vehicleId   Int
   date        DateTime @default(now())
-  description String
+  description String   @db.Text
   mileage     Int?
   positionMap Json?
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
@@ -350,7 +350,7 @@ model PartExchange {
   action      String
   quantity    Int      @default(1)
   date        DateTime @default(now())
-  description String
+  description String   @db.Text
   product     Product  @relation(fields: [productId], references: [id])
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 
