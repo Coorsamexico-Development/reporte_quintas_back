@@ -56,17 +56,17 @@ export class MaintenanceService {
                 const log = await tx.maintenance.create({
                     data: {
                         vehicleId: vehicleId,
-                        userId: userId ? Number(userId) : undefined,
-                        providerId: providerId ? Number(providerId) : undefined,
+                        userId: userId ? Number(userId) : null,
+                        providerId: providerId ? Number(providerId) : null,
                         type: logData.type || 'PREVENTIVE',
                         description: logData.description || '',
                         date: startDate,
                         endDate: endDate,
                         inactiveDays: inactiveDays,
                         inactiveHours: inactiveHours,
-                        odometer: logData.odometer ? Number(logData.odometer) : undefined,
-                        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
-                        scheduledMaintenanceId: (scheduledId && scheduledId !== 'null') ? +scheduledId : undefined,
+                        odometer: logData.odometer ? Number(logData.odometer) : null,
+                        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : null,
+                        scheduledMaintenanceId: (scheduledId && scheduledId !== 'null') ? +scheduledId : null,
                         evidence: {
                             create: (Array.isArray(evidenceUrls) ? evidenceUrls : []).map((url) => ({ url })),
                         },

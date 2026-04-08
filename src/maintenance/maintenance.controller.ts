@@ -21,7 +21,7 @@ export class MaintenanceController {
         @Req() req: any
     ) {
         if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.createLog(data, files, req.user?.id);
+        return this.maintenanceService.createLog(data, files, req.user?.userId);
     }
 
     @Put('log/:id')
