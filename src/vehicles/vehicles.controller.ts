@@ -44,7 +44,16 @@ export class VehiclesController {
     @Roles(Role.ADMIN)
     update(
         @Param('id', ParseIntPipe) id: number,
-        @Body() data: { plate?: string; truckNumber?: string; status?: VehicleStatus },
+        @Body() data: { 
+            plate?: string; 
+            truckNumber?: string; 
+            status?: VehicleStatus;
+            engine?: string;
+            yearModel?: number;
+            vin?: string;
+            currentCedisId?: number;
+            brandId?: number;
+        },
     ) {
         return this.vehiclesService.update(id, data);
     }

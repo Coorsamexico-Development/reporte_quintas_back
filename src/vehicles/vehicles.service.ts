@@ -94,16 +94,47 @@ export class VehiclesService {
         yearModel?: number;
         vin?: string;
     }) {
-        return this.prisma.vehicle.create({
-            data,
-        });
+        try {
+            return await this.prisma.vehicle.create({
+                data,
+            });
+        } catch (error) {
+            if (error.code === 'P2002') {
+                const target = error.meta?.target || '';
+                if (target.includes('plate')) throw new Error('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new Error('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new Error('Ya existe un vehículo con ese número VIN');
+                throw new Error('Ya existe un registro con esos datos únicos');
+            }
+            throw error;
+        }
     }
 
-    async update(id: number, data: { plate?: string; truckNumber?: string; status?: VehicleStatus }) {
-        return this.prisma.vehicle.update({
-            where: { id },
-            data,
-        });
+    async update(id: number, data: { 
+        plate?: string; 
+        truckNumber?: string; 
+        status?: VehicleStatus;
+        engine?: string;
+        yearModel?: number;
+        vin?: string;
+        currentCedisId?: number;
+        brandId?: number;
+    }) {
+        try {
+            return await this.prisma.vehicle.update({
+                where: { id },
+                data,
+            });
+        } catch (error) {
+            if (error.code === 'P2002') {
+                const target = error.meta?.target || '';
+                if (target.includes('plate')) throw new Error('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new Error('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new Error('Ya existe un vehículo con ese número VIN');
+                throw new Error('Ya existe un registro con esos datos únicos');
+            }
+            throw error;
+        }
     }
 
     async moveVehicle(vehicleId: number, toCedisId: number, userId: number, reason?: string) {
