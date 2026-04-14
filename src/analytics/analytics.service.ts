@@ -137,12 +137,13 @@ export class AnalyticsService {
     }
 
     async getGlobalSummary() {
-        const [scheduled, maintenances, vehicles] = await Promise.all([
+        const [scheduled, maintenances, vehicles, faults] = await Promise.all([
             this.prisma.scheduledMaintenance.findMany(),
             this.prisma.maintenance.findMany({
                 include: { tickets: { include: { items: true } }, parts: true }
             }),
-            this.prisma.vehicle.findMany()
+            this.prisma.vehicle.findMany(),
+            this.prisma.fault.findMany()
         ]);
 
         // Compliance
@@ -195,19 +196,46 @@ export class AnalyticsService {
             }
         });
 
-        // Stats by Unit
-        const unitCounts: Record<number, number> = {};
-        maintenances.forEach(m => {
-            unitCounts[m.vehicleId] = (unitCounts[m.vehicleId] || 0) + 1;
+        // Stats by Unit (Faults and Cost)
+        const vehicleStats: Record<number, { faultCount: number, cost: number }> = {};
+        vehicles.forEach(v => {
+            vehicleStats[v.id] = { faultCount: 0, cost: 0 };
         });
 
-        const topUnits = Object.entries(unitCounts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
-            .map(([id, count]) => {
-                const v = vehicles.find(veh => veh.id === Number(id));
-                return { truckNumber: v?.truckNumber || '?', count };
+        faults.forEach(f => {
+            if (vehicleStats[f.vehicleId]) {
+                vehicleStats[f.vehicleId].faultCount++;
+            }
+        });
+
+        maintenances.forEach(m => {
+            let mTotal = 0;
+            m.tickets.forEach(t => {
+                t.items.forEach(i => {
+                    const labor = Number(i.laborCost) || 0;
+                    const parts = Number(i.cost) || 0;
+                    const iva = i.hasIva ? (labor + parts) * 0.16 : 0;
+                    mTotal += labor + parts + iva;
+                });
             });
+            m.parts.forEach(p => {
+                mTotal += (Number(p.unitCost) || 0) * p.quantity;
+            });
+            if (vehicleStats[m.vehicleId]) {
+                vehicleStats[m.vehicleId].cost += mTotal;
+            }
+        });
+
+        const topFaultyUnits = vehicles
+            .map(v => ({
+                id: v.id,
+                truckNumber: v.truckNumber,
+                faultCount: vehicleStats[v.id]?.faultCount || 0,
+                cost: vehicleStats[v.id]?.cost || 0
+            }))
+            .filter(v => v.faultCount > 0 || v.cost > 0)
+            .sort((a, b) => b.faultCount - a.faultCount || b.cost - a.cost)
+            .slice(0, 5);
 
         return {
             compliance: {
@@ -223,7 +251,7 @@ export class AnalyticsService {
                 total: totalLabor + totalParts + totalExtra,
                 monthly: monthlyExpenses
             },
-            topUnits
+            topFaultyUnits
         };
     }
 }

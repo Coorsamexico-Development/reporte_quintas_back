@@ -10,6 +10,17 @@ export class MaintenanceService {
         private storage: StorageService
     ) { }
 
+    private async updateVehicleStatus(tx: any, vehicleId: number) {
+        const openMaintenances = await tx.maintenance.count({
+            where: { vehicleId, endDate: null }
+        });
+
+        await tx.vehicle.update({
+            where: { id: vehicleId },
+            data: { status: openMaintenances > 0 ? 'MAINTENANCE' : 'ACTIVE' }
+        });
+    }
+
     async createLog(data: any, files?: Express.Multer.File[], userId?: number) {
         let { evidenceUrls, tickets, parts, resolvedFaultIds, scheduledId, maintenanceTypeId, providerId, ...logData } = data;
         
@@ -116,11 +127,8 @@ export class MaintenanceService {
                     include: { evidence: true, tickets: { include: { items: true } }, parts: true },
                 });
 
-                // Update Vehicle Status
-                await tx.vehicle.update({
-                    where: { id: vehicleId },
-                    data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
-                });
+                // Update Vehicle Status based on open logs
+                await this.updateVehicleStatus(tx, vehicleId);
 
                 if (resolvedFaultIds && Array.isArray(resolvedFaultIds) && resolvedFaultIds.length > 0) {
                     await tx.fault.updateMany({
@@ -164,6 +172,7 @@ export class MaintenanceService {
         try {
             if (typeof tickets === 'string') tickets = JSON.parse(tickets);
             if (typeof existingEvidence === 'string') existingEvidence = JSON.parse(existingEvidence);
+            if (typeof resolvedFaultIds === 'string') resolvedFaultIds = JSON.parse(resolvedFaultIds);
         } catch (e) {
             console.error('Error parsing JSON from FormData in updateLog:', e);
         }
@@ -259,12 +268,20 @@ export class MaintenanceService {
                     include: { tickets: { include: { items: true } }, parts: true, evidence: true },
                 });
 
-                // Update Vehicle Status
+                // Update Vehicle Status based on open logs
                 const vId = rest.vehicleId ? Number(rest.vehicleId) : log?.vehicleId;
                 if (vId) {
-                    await tx.vehicle.update({
-                        where: { id: vId },
-                        data: { status: endDate ? 'ACTIVE' : 'MAINTENANCE' }
+                    await this.updateVehicleStatus(tx, vId);
+                }
+
+                if (resolvedFaultIds && Array.isArray(resolvedFaultIds) && resolvedFaultIds.length > 0) {
+                    await tx.fault.updateMany({
+                        where: { id: { in: resolvedFaultIds.map(Number) } },
+                        data: {
+                            status: 'RESOLVED',
+                            resolvedAt: new Date(),
+                            maintenanceId: id
+                        }
                     });
                 }
 
@@ -319,17 +336,8 @@ export class MaintenanceService {
                 where: { id }
             });
 
-            // Refresh vehicle status (optional: check if there are other open maintenances)
-            const openMaintenances = await tx.maintenance.count({
-                where: { vehicleId: log.vehicleId, endDate: null }
-            });
-
-            if (openMaintenances === 0) {
-                await tx.vehicle.update({
-                    where: { id: log.vehicleId },
-                    data: { status: 'ACTIVE' }
-                });
-            }
+            // Refresh vehicle status using the centralized logic
+            await this.updateVehicleStatus(tx, log.vehicleId);
 
             return deleted;
         });
