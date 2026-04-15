@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { InventoryService } from './inventory.service';
 import { InventoryStartType } from '@prisma/client';
 import { UseGuards } from '@nestjs/common';
@@ -13,19 +14,21 @@ export class InventoryController {
 
     @Post('movement')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     recordMovement(
-        @Body()
-        data: {
-            cedisId: number;
-            productId: number;
-            type: InventoryStartType;
-            quantity: number;
-            unitPrice?: number;
-            userId?: number;
-            notes?: string;
-        },
+        @UploadedFiles() files: Express.Multer.File[],
+        @Body() body: any
     ) {
-        return this.inventoryService.recordMovement(data);
+        const data = {
+            cedisId: Number(body.cedisId),
+            productId: Number(body.productId),
+            type: body.type as InventoryStartType,
+            quantity: Number(body.quantity),
+            unitPrice: body.unitPrice ? Number(body.unitPrice) : undefined,
+            userId: body.userId ? Number(body.userId) : undefined,
+            notes: body.notes,
+        };
+        return this.inventoryService.recordMovement(data, files);
     }
 
     @Get('movements')
