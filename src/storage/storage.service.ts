@@ -81,9 +81,20 @@ export class StorageService {
                 }
 
                 if (filePath) {
+                    // Decodificar completamente el filePath (ej. %252C -> %2C -> ,)
+                    let decodedPath = filePath;
+                    try {
+                        decodedPath = decodeURIComponent(filePath);
+                        if (decodedPath.includes('%')) {
+                            decodedPath = decodeURIComponent(decodedPath);
+                        }
+                    } catch (err) {
+                        console.error('Error decoding GCS filePath:', err);
+                    }
+
                     const [signedUrl] = await this.gcsStorage
                         .bucket(this.bucketName)
-                        .file(filePath)
+                        .file(decodedPath)
                         .getSignedUrl({
                             version: 'v4',
                             action: 'read',
@@ -106,7 +117,19 @@ export class StorageService {
                 const urlParts = url.split(`${this.bucketName}/`);
                 if (urlParts.length > 1) {
                     const filePath = urlParts[1].split('?')[0];
-                    await this.gcsStorage.bucket(this.bucketName).file(filePath).delete();
+                    
+                    // Decodificar completamente el filePath para eliminación
+                    let decodedPath = filePath;
+                    try {
+                        decodedPath = decodeURIComponent(filePath);
+                        if (decodedPath.includes('%')) {
+                            decodedPath = decodeURIComponent(decodedPath);
+                        }
+                    } catch (err) {
+                        console.error('Error decoding GCS filePath for deletion:', err);
+                    }
+
+                    await this.gcsStorage.bucket(this.bucketName).file(decodedPath).delete();
                 }
             } catch (e) {
                 console.error('Error deleting GCS file:', e);
