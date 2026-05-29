@@ -50,6 +50,7 @@ export class ScheduledMaintenanceService {
       where: {
         status: status || undefined,
         vehicleId: vehicleId ? +vehicleId : undefined,
+        isActive: true,
       },
       include: {
         vehicle: true,
@@ -111,8 +112,9 @@ export class ScheduledMaintenanceService {
   }
 
   async remove(id: number) {
-    return this.prisma.scheduledMaintenance.delete({
+    return this.prisma.scheduledMaintenance.update({
       where: { id },
+      data: { isActive: false },
     });
   }
 
@@ -121,6 +123,7 @@ export class ScheduledMaintenanceService {
     return this.prisma.scheduledMaintenance.findMany({
       where: {
         status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+        isActive: true,
       },
       include: {
         vehicle: true,

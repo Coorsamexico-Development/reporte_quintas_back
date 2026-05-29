@@ -69,7 +69,7 @@ export class FaultsService {
   async getVehicleFaults(vehicleId: number) {
     try {
       return await this.db.fault.findMany({
-        where: { vehicleId, status: FaultStatus.PENDING },
+        where: { vehicleId, status: FaultStatus.PENDING, isActive: true },
         orderBy: { reportedAt: 'desc' },
       });
     } catch (error) {
@@ -83,7 +83,7 @@ export class FaultsService {
       const now = new Date();
       
       const pendingFaults = await this.db.fault.findMany({
-        where: { status: FaultStatus.PENDING },
+        where: { status: FaultStatus.PENDING, isActive: true },
         include: { vehicle: { select: { plate: true, truckNumber: true } } },
         orderBy: { reportedAt: 'asc' },
       });
@@ -108,6 +108,25 @@ export class FaultsService {
     } catch (error) {
       console.error('Error fetching default alerts:', error);
       throw new InternalServerErrorException(`Failed to fetch alerts: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async deleteFault(id: number, unlink = true) {
+    try {
+      return await this.db.fault.update({
+        where: { id },
+        data: {
+          isActive: false,
+          ...(unlink && {
+            maintenanceId: null,
+            status: FaultStatus.PENDING,
+            resolvedAt: null
+          })
+        }
+      });
+    } catch (error) {
+      console.error('Error deleting fault:', error);
+      throw new InternalServerErrorException('Failed to delete fault');
     }
   }
 }

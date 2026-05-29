@@ -167,6 +167,7 @@ export class VehiclesService {
             where: { id },
             include: {
                 maintenanceLogs: {
+                    where: { isActive: true },
                     include: { 
                         provider: true, 
                         user: true, 
@@ -177,21 +178,26 @@ export class VehiclesService {
                     orderBy: { date: 'desc' }
                 },
                 movementHistory: {
+                    where: { isActive: true },
                     include: { fromCedis: true, toCedis: true, user: true, evidence: true },
                     orderBy: { date: 'desc' }
                 },
                 faults: {
+                    where: { isActive: true },
                     include: { evidence: true },
                     orderBy: { reportedAt: 'desc' }
                 },
                 partExchanges: {
+                    where: { isActive: true },
                     include: { product: true },
                     orderBy: { date: 'desc' }
                 },
                 tireRotations: {
+                    where: { isActive: true },
                     orderBy: { date: 'desc' }
                 },
                 scheduledMaintenances: {
+                    where: { isActive: true },
                     orderBy: { date: 'desc' }
                 }
             }
@@ -292,5 +298,55 @@ export class VehiclesService {
         );
 
         return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    async checkEventAssociation(type: string, id: number) {
+        const cleanType = type.toUpperCase();
+        if (cleanType === 'FAULT') {
+            const fault = await this.prisma.fault.findUnique({
+                where: { id },
+                include: { maintenance: true }
+            });
+            if (fault && fault.maintenanceId && fault.maintenance?.isActive) {
+                return {
+                    hasAssociation: true,
+                    message: `Esta avería está asociada al Mantenimiento #${fault.maintenanceId} (${fault.maintenance.description.substring(0, 50)}...).`,
+                    associationType: 'MAINTENANCE',
+                    associationId: fault.maintenanceId
+                };
+            }
+        } else if (cleanType === 'MAINTENANCE') {
+            const activeFaults = await this.prisma.fault.findMany({
+                where: { maintenanceId: id, isActive: true }
+            });
+            if (activeFaults.length > 0) {
+                return {
+                    hasAssociation: true,
+                    message: `Este mantenimiento resolvió las siguientes averías activas: ${activeFaults.map(f => `"${f.title}"`).join(', ')}.`,
+                    associationType: 'FAULT',
+                    associatedItems: activeFaults.map(f => ({ id: f.id, title: f.title }))
+                };
+            }
+        } else if (cleanType === 'SCHEDULED_MAINTENANCE') {
+            const linkedMaint = await this.prisma.maintenance.findFirst({
+                where: { scheduledMaintenanceId: id, isActive: true }
+            });
+            if (linkedMaint) {
+                return {
+                    hasAssociation: true,
+                    message: `Esta programación está vinculada al Mantenimiento registrado #${linkedMaint.id}.`,
+                    associationType: 'MAINTENANCE',
+                    associationId: linkedMaint.id
+                };
+            }
+        }
+        return { hasAssociation: false };
+    }
+
+    async deleteMovement(id: number) {
+        return this.prisma.vehicleMovement.update({
+            where: { id },
+            data: { isActive: false }
+        });
     }
 }

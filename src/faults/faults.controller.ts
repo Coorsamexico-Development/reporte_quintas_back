@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Query, Body, Param, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FaultsService, CreateFaultDto } from './faults.service';
 
@@ -23,5 +23,14 @@ export class FaultsController {
   @Get('alerts')
   getAlerts() {
     return this.faultsService.getAlerts();
+  }
+
+  @Delete(':id')
+  deleteFault(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('unlink') unlink?: string
+  ) {
+    const shouldUnlink = unlink !== 'false';
+    return this.faultsService.deleteFault(id, shouldUnlink);
   }
 }

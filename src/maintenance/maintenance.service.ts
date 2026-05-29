@@ -12,7 +12,7 @@ export class MaintenanceService {
 
     private async updateVehicleStatus(tx: any, vehicleId: number) {
         const openMaintenances = await tx.maintenance.count({
-            where: { vehicleId, endDate: null }
+            where: { vehicleId, endDate: null, isActive: true }
         });
 
         await tx.vehicle.update({
@@ -302,44 +302,32 @@ export class MaintenanceService {
         }
     }
 
-    async deleteLog(id: number) {
+    async deleteLog(id: number, unlinkFaults = true) {
         return this.prisma.$transaction(async (tx) => {
             const log = await tx.maintenance.findUnique({
-                where: { id },
-                include: { tickets: true, parts: true, evidence: true }
+                where: { id }
             });
 
             if (!log) throw new Error('Maintenance log not found');
 
-            // Delete relations manually if needed (Prisma often handles this if onDelete: Cascade is set)
-            // But let's be explicit for certainty
-            await tx.maintenanceTicketItem.deleteMany({
-                where: { ticket: { maintenanceId: id } }
-            });
-            await tx.maintenanceTicket.deleteMany({
-                where: { maintenanceId: id }
-            });
-            await tx.maintenancePart.deleteMany({
-                where: { maintenanceId: id }
-            });
-            await tx.maintenanceEvidence.deleteMany({
-                where: { maintenanceId: id }
+            // Soft delete
+            const updated = await tx.maintenance.update({
+                where: { id },
+                data: { isActive: false }
             });
 
-            // Revert faults to pending if they were resolved by this log
-            await tx.fault.updateMany({
-                where: { maintenanceId: id },
-                data: { status: 'PENDING', maintenanceId: null, resolvedAt: null }
-            });
-
-            const deleted = await tx.maintenance.delete({
-                where: { id }
-            });
+            // Revert faults to pending if they were resolved by this log and we want to unlink them
+            if (unlinkFaults) {
+                await tx.fault.updateMany({
+                    where: { maintenanceId: id },
+                    data: { status: 'PENDING', maintenanceId: null, resolvedAt: null }
+                });
+            }
 
             // Refresh vehicle status using the centralized logic
             await this.updateVehicleStatus(tx, log.vehicleId);
 
-            return deleted;
+            return updated;
         });
     }
 
@@ -348,6 +336,7 @@ export class MaintenanceService {
             where: {
                 vehicleId: vehicleId ? +vehicleId : undefined,
                 providerId: providerId ? +providerId : undefined,
+                isActive: true, // <--- Filter!
             },
             include: {
                 vehicle: true,
@@ -372,6 +361,20 @@ export class MaintenanceService {
             }
             return log;
         }));
+    }
+
+    async deletePartExchange(id: number) {
+        return this.prisma.partExchange.update({
+            where: { id },
+            data: { isActive: false }
+        });
+    }
+
+    async deleteTireRotation(id: number) {
+        return this.prisma.tireRotation.update({
+            where: { id },
+            data: { isActive: false }
+        });
     }
 
     async recordTireRotation(data: {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { VehiclesService } from './vehicles.service';
 import { VehicleStatus, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,6 +24,15 @@ export class VehiclesController {
     @UseGuards(JwtAuthGuard)
     async getHistory(@Param('id') id: string) {
         return this.vehiclesService.getVehicleHistory(+id);
+    }
+
+    @Get('history/check-association/:type/:id')
+    @UseGuards(JwtAuthGuard)
+    async checkAssociation(
+        @Param('type') type: string,
+        @Param('id', ParseIntPipe) id: number
+    ) {
+        return this.vehiclesService.checkEventAssociation(type, id);
     }
 
     @Post()
@@ -66,5 +75,11 @@ export class VehiclesController {
         @Request() req
     ) {
         return this.vehiclesService.moveVehicle(id, data.toCedisId, req.user.userId, data.reason);
+    }
+
+    @Delete('movement/:id')
+    @UseGuards(JwtAuthGuard)
+    deleteMovement(@Param('id', ParseIntPipe) id: number) {
+        return this.vehiclesService.deleteMovement(id);
     }
 }

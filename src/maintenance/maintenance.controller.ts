@@ -76,7 +76,23 @@ export class MaintenanceController {
 
     @Delete('log/:id')
     @Roles('ADMIN')
-    deleteLog(@Param('id', ParseIntPipe) id: number) {
-        return this.maintenanceService.deleteLog(id);
+    deleteLog(
+        @Param('id', ParseIntPipe) id: number,
+        @Query('unlink') unlink?: string
+    ) {
+        const shouldUnlink = unlink !== 'false';
+        return this.maintenanceService.deleteLog(id, shouldUnlink);
+    }
+
+    @Delete('part-exchange/:id')
+    @Roles('ADMIN')
+    deletePartExchange(@Param('id', ParseIntPipe) id: number) {
+        return this.maintenanceService.deletePartExchange(id);
+    }
+
+    @Delete('tire-rotation/:id')
+    @Roles('ADMIN')
+    deleteTireRotation(@Param('id', ParseIntPipe) id: number) {
+        return this.maintenanceService.deleteTireRotation(id);
     }
 }

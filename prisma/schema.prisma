@@ -76,6 +76,7 @@ model VehicleMovement {
   date        DateTime                  @default(now())
   userId      Int
   reason      String?                   @db.Text
+  isActive    Boolean                   @default(true)
   fromCedis   Cedis?                    @relation("FromCedis", fields: [fromCedisId], references: [id])
   toCedis     Cedis                     @relation("ToCedis", fields: [toCedisId], references: [id])
   user        User                      @relation(fields: [userId], references: [id])
@@ -146,6 +147,7 @@ model Maintenance {
   endDate               DateTime?
   inactiveDays           Int?
   inactiveHours          Int?
+  isActive               Boolean               @default(true)
   faultsResolved         Fault[]
   provider               Provider?             @relation(fields: [providerId], references: [id])
   scheduledMaintenance   ScheduledMaintenance? @relation(fields: [scheduledMaintenanceId], references: [id])
@@ -203,6 +205,7 @@ model Fault {
   resolvedAt    DateTime?
   maintenanceId Int?
   title         String
+  isActive      Boolean         @default(true)
   maintenance   Maintenance?    @relation(fields: [maintenanceId], references: [id])
   vehicle       Vehicle         @relation(fields: [vehicleId], references: [id])
   evidence      FaultEvidence[]
@@ -232,6 +235,7 @@ model ScheduledMaintenance {
   status            MaintenanceStatus   @default(SCHEDULED)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
+  isActive          Boolean             @default(true)
   maintenances      Maintenance[]
   vehicle           Vehicle             @relation(fields: [vehicleId], references: [id])
   maintenanceType   MaintenanceType?    @relation(fields: [maintenanceTypeId], references: [id])
@@ -338,6 +342,7 @@ model TireRotation {
   description String   @db.Text
   mileage     Int?
   positionMap Json?
+  isActive    Boolean  @default(true)
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 
   @@index([vehicleId], map: "TireRotation_vehicleId_fkey")
@@ -351,6 +356,7 @@ model PartExchange {
   quantity    Int      @default(1)
   date        DateTime @default(now())
   description String   @db.Text
+  isActive    Boolean  @default(true)
   product     Product  @relation(fields: [productId], references: [id])
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
 
