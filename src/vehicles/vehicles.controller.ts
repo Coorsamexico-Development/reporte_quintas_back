@@ -22,8 +22,8 @@ export class VehiclesController {
 
     @Get(':id/history')
     @UseGuards(JwtAuthGuard)
-    async getHistory(@Param('id') id: string) {
-        return this.vehiclesService.getVehicleHistory(+id);
+    async getHistory(@Param('id', ParseIntPipe) id: number) {
+        return this.vehiclesService.getVehicleHistory(id);
     }
 
     @Get('history/check-association/:type/:id')
