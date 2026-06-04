@@ -12,6 +12,7 @@ export class VehiclesService {
 
     async findAll() {
         return this.prisma.vehicle.findMany({
+            where: { isActive: true },
             include: {
                 currentCedis: true,
                 brand: true,
@@ -44,7 +45,7 @@ export class VehiclesService {
                 },
                 tireRotations: true,
                 partExchanges: {
-                    include: { product: true }
+                    include: { product: true, evidence: true }
                 },
                 faults: true
             },
@@ -71,6 +72,19 @@ export class VehiclesService {
                 if (doc.evidence) {
                     doc.evidence = await Promise.all(
                         doc.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
+        if (vehicle.partExchanges) {
+            for (const ex of vehicle.partExchanges) {
+                if (ex.evidence) {
+                    ex.evidence = await Promise.all(
+                        ex.evidence.map(async (e) => ({
                             ...e,
                             url: await this.storageService.getViewUrl(e.url)
                         }))
@@ -189,7 +203,7 @@ export class VehiclesService {
                 },
                 partExchanges: {
                     where: { isActive: true },
-                    include: { product: true },
+                    include: { product: true, evidence: true },
                     orderBy: { date: 'desc' }
                 },
                 tireRotations: {
@@ -211,7 +225,7 @@ export class VehiclesService {
                 id: `maintenance-${log.id}`,
                 type: 'MAINTENANCE',
                 logId: log.id,
-                date: log.date,
+                date: log.endDate || log.date,
                 title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
                 description: log.description,
                 user: log.user?.name,
@@ -250,14 +264,18 @@ export class VehiclesService {
                 },
                 evidence: fault.evidence.map(e => e.url)
             })),
-            ...vehicle.partExchanges.map(ex => ({
-                id: `exchange-${ex.id}`,
-                type: 'PART_EXCHANGE',
-                date: ex.date,
-                title: 'Cambio de Pieza',
-                description: `${ex.action === 'REMOVED' ? 'Se retiró' : 'Se recibió'} ${ex.product.name}`,
-                meta: { product: ex.product.name, action: ex.action }
-            })),
+            ...vehicle.partExchanges.map(ex => {
+                const actionLabel = ex.action === 'REMOVED' || ex.action === 'RETIRO' ? 'Retiro' : 'Instalación';
+                return {
+                    id: `exchange-${ex.id}`,
+                    type: 'PART_EXCHANGE',
+                    date: ex.date,
+                    title: `Canibalización: ${actionLabel} de ${ex.product.name}`,
+                    description: ex.description,
+                    meta: { product: ex.product.name, action: ex.action },
+                    evidence: ex.evidence?.map(e => e.url) || []
+                };
+            }),
             ...vehicle.tireRotations.map(rot => ({
                 id: `tire-${rot.id}`,
                 type: 'TIRE_ROTATION',
@@ -345,6 +363,13 @@ export class VehiclesService {
 
     async deleteMovement(id: number) {
         return this.prisma.vehicleMovement.update({
+            where: { id },
+            data: { isActive: false }
+        });
+    }
+
+    async remove(id: number) {
+        return this.prisma.vehicle.update({
             where: { id },
             data: { isActive: false }
         });

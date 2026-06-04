@@ -50,6 +50,7 @@ model Vehicle {
   fuelTypeId            Int?
   transmissionId        Int?
   createdAt             DateTime               @default(now())
+  isActive              Boolean                @default(true)
   faults                Fault[]
   maintenanceLogs       Maintenance[]
   partExchanges         PartExchange[]
@@ -349,19 +350,30 @@ model TireRotation {
 }
 
 model PartExchange {
-  id          Int      @id @default(autoincrement())
+  id          Int                    @id @default(autoincrement())
   vehicleId   Int
   productId   Int
   action      String
-  quantity    Int      @default(1)
-  date        DateTime @default(now())
-  description String   @db.Text
-  isActive    Boolean  @default(true)
-  product     Product  @relation(fields: [productId], references: [id])
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  quantity    Int                    @default(1)
+  date        DateTime               @default(now())
+  description String                 @db.Text
+  isActive    Boolean                @default(true)
+  product     Product                @relation(fields: [productId], references: [id])
+  vehicle     Vehicle                @relation(fields: [vehicleId], references: [id])
+  evidence    PartExchangeEvidence[]
 
   @@index([productId], map: "PartExchange_productId_fkey")
   @@index([vehicleId], map: "PartExchange_vehicleId_fkey")
+}
+
+model PartExchangeEvidence {
+  id             Int          @id @default(autoincrement())
+  partExchangeId Int
+  url            String       @db.Text
+  createdAt      DateTime     @default(now())
+  partExchange   PartExchange @relation(fields: [partExchangeId], references: [id], onDelete: Cascade)
+
+  @@index([partExchangeId], map: "PartExchangeEvidence_partExchangeId_fkey")
 }
 
 model VehicleBrand {

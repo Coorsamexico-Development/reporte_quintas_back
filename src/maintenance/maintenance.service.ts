@@ -388,14 +388,33 @@ export class MaintenanceService {
         });
     }
 
-    async recordPartExchange(data: {
-        vehicleId: number;
-        date: Date;
-        productId: number;
-        action: string;
-        description: string;
-        targetVehicleId?: number;
-    }) {
+    async recordPartExchange(
+        data: {
+            vehicleId: number;
+            date: Date;
+            productId: number;
+            action: string;
+            description: string;
+            targetVehicleId?: number;
+        },
+        files?: Express.Multer.File[]
+    ) {
+        const vehicle = await this.prisma.vehicle.findUnique({ where: { id: data.vehicleId } });
+        const truckNumber = vehicle?.truckNumber || 'unknown';
+
+        let targetVehicleTruckNumber = 'unknown';
+        if (data.targetVehicleId) {
+            const targetVehicle = await this.prisma.vehicle.findUnique({ where: { id: data.targetVehicleId } });
+            targetVehicleTruckNumber = targetVehicle?.truckNumber || 'unknown';
+        }
+
+        let evidenceUrls: string[] = [];
+        if (files && files.length > 0) {
+            evidenceUrls = await Promise.all(
+                files.map(file => this.storage.uploadFile(file, `unidades/${truckNumber}/canibalizaciones`))
+            );
+        }
+
         // Si hay un vehículo destino, guardamos el log para ambos
         if (data.targetVehicleId) {
             await this.prisma.$transaction([
@@ -405,7 +424,10 @@ export class MaintenanceService {
                         date: data.date,
                         productId: data.productId,
                         action: 'RETIRO',
-                        description: `Canibalización para unidad: ${data.targetVehicleId}. ${data.description}`,
+                        description: `Canibalización: Se retiró pieza para instalarse en Unidad ${targetVehicleTruckNumber}. Notas: ${data.description}`,
+                        evidence: {
+                            create: evidenceUrls.map(url => ({ url }))
+                        }
                     }
                 }),
                 this.prisma.partExchange.create({
@@ -414,7 +436,10 @@ export class MaintenanceService {
                         date: data.date,
                         productId: data.productId,
                         action: 'INSTALACION',
-                        description: `Componente extraído de unidad: ${data.vehicleId}. ${data.description}`,
+                        description: `Canibalización: Componente instalado proveniente de Unidad ${truckNumber}. Notas: ${data.description}`,
+                        evidence: {
+                            create: evidenceUrls.map(url => ({ url }))
+                        }
                     }
                 })
             ]);
@@ -428,6 +453,9 @@ export class MaintenanceService {
                 productId: data.productId,
                 action: data.action,
                 description: data.description,
+                evidence: {
+                    create: evidenceUrls.map(url => ({ url }))
+                }
             }
         });
     }

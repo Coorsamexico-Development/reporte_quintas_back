@@ -60,18 +60,20 @@ export class MaintenanceController {
 
     @Post('part-exchange')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     recordPartExchange(
-        @Body()
-        data: {
-            vehicleId: number;
-            date: Date;
-            productId: number;
-            action: string;
-            description: string;
-        },
+        @UploadedFiles() files: Express.Multer.File[],
+        @Body() data: any,
     ) {
-        if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.recordPartExchange(data);
+        const payload = {
+            vehicleId: Number(data.vehicleId),
+            productId: Number(data.productId),
+            targetVehicleId: data.targetVehicleId ? Number(data.targetVehicleId) : undefined,
+            date: data.date ? new Date(data.date) : new Date(),
+            action: data.action,
+            description: data.description,
+        };
+        return this.maintenanceService.recordPartExchange(payload, files);
     }
 
     @Delete('log/:id')

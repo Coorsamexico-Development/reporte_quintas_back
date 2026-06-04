@@ -82,4 +82,10 @@ export class VehiclesController {
     deleteMovement(@Param('id', ParseIntPipe) id: number) {
         return this.vehiclesService.deleteMovement(id);
     }
+
+    @Delete(':id')
+    @Roles(Role.ADMIN)
+    remove(@Param('id', ParseIntPipe) id: number) {
+        return this.vehiclesService.remove(id);
+    }
 }
