@@ -272,7 +272,11 @@ export class VehiclesService {
                     date: ex.date,
                     title: `Canibalización: ${actionLabel} de ${ex.product.name}`,
                     description: ex.description,
-                    meta: { product: ex.product.name, action: ex.action },
+                    meta: { 
+                        product: ex.product.name, 
+                        productCode: ex.product.code, 
+                        action: ex.action 
+                    },
                     evidence: ex.evidence?.map(e => e.url) || []
                 };
             }),
