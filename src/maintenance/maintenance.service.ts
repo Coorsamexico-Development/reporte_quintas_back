@@ -396,6 +396,7 @@ export class MaintenanceService {
             action: string;
             description: string;
             targetVehicleId?: number;
+            cost?: number;
         },
         files?: Express.Multer.File[]
     ) {
@@ -415,6 +416,8 @@ export class MaintenanceService {
             );
         }
 
+        const exchangeCost = data.cost ? Number(data.cost) : 0;
+
         // Si hay un vehículo destino, guardamos el log para ambos
         if (data.targetVehicleId) {
             await this.prisma.$transaction([
@@ -425,6 +428,7 @@ export class MaintenanceService {
                         productId: data.productId,
                         action: 'RETIRO',
                         description: `Canibalización: Se retiró pieza para instalarse en Unidad ${targetVehicleTruckNumber}. Notas: ${data.description}`,
+                        cost: exchangeCost,
                         evidence: {
                             create: evidenceUrls.map(url => ({ url }))
                         }
@@ -437,6 +441,7 @@ export class MaintenanceService {
                         productId: data.productId,
                         action: 'INSTALACION',
                         description: `Canibalización: Componente instalado proveniente de Unidad ${truckNumber}. Notas: ${data.description}`,
+                        cost: exchangeCost,
                         evidence: {
                             create: evidenceUrls.map(url => ({ url }))
                         }
@@ -453,10 +458,94 @@ export class MaintenanceService {
                 productId: data.productId,
                 action: data.action,
                 description: data.description,
+                cost: exchangeCost,
                 evidence: {
                     create: evidenceUrls.map(url => ({ url }))
                 }
             }
         });
+    }
+
+    async getProductCostHistory(vehicleId: number, productId: number) {
+        const [ticketItems, parts, exchanges] = await Promise.all([
+            this.prisma.maintenanceTicketItem.findMany({
+                where: {
+                    productId: productId,
+                    ticket: {
+                        maintenance: {
+                            vehicleId: vehicleId,
+                            isActive: true
+                        }
+                    }
+                },
+                include: {
+                    ticket: {
+                        include: {
+                            maintenance: true
+                        }
+                    }
+                }
+            }),
+            this.prisma.maintenancePart.findMany({
+                where: {
+                    productId: productId,
+                    maintenance: {
+                        vehicleId: vehicleId,
+                        isActive: true
+                    }
+                },
+                include: {
+                    maintenance: true
+                }
+            }),
+            this.prisma.partExchange.findMany({
+                where: {
+                    productId: productId,
+                    vehicleId: vehicleId,
+                    action: 'INSTALACION',
+                    isActive: true
+                }
+            })
+        ]);
+
+        const historyList: any[] = [];
+
+        // Process ticket items
+        ticketItems.forEach(item => {
+            const costVal = Number(item.cost) || 0;
+            if (costVal > 0) {
+                historyList.push({
+                    cost: costVal,
+                    date: item.ticket.maintenance.date,
+                    source: `Ticket de Mantenimiento #${item.ticket.ticketNumber || 'S/N'}`
+                });
+            }
+        });
+
+        // Process parts
+        parts.forEach(part => {
+            const costVal = Number(part.unitCost) || 0;
+            if (costVal > 0) {
+                historyList.push({
+                    cost: costVal,
+                    date: part.maintenance.date,
+                    source: `Refacción de Mantenimiento`
+                });
+            }
+        });
+
+        // Process exchanges
+        exchanges.forEach(ex => {
+            const costVal = Number(ex.cost) || 0;
+            if (costVal > 0) {
+                historyList.push({
+                    cost: costVal,
+                    date: ex.date,
+                    source: `Canibalización (Instalación)`
+                });
+            }
+        });
+
+        return historyList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 }

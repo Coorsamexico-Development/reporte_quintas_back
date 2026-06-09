@@ -6,15 +6,25 @@ export class AnalyticsService {
     constructor(private readonly prisma: PrismaService) { }
 
     async getExpenses() {
-        const maintenances = await this.prisma.maintenance.findMany({
-            include: {
-                vehicle: {
-                    include: { currentCedis: true }
-                },
-                tickets: { include: { items: true } },
-                parts: true
-            }
-        });
+        const [maintenances, exchanges] = await Promise.all([
+            this.prisma.maintenance.findMany({
+                include: {
+                    vehicle: {
+                        include: { currentCedis: true }
+                    },
+                    tickets: { include: { items: true } },
+                    parts: true
+                }
+            }),
+            this.prisma.partExchange.findMany({
+                where: { isActive: true, cost: { gt: 0 } },
+                include: {
+                    vehicle: {
+                        include: { currentCedis: true }
+                    }
+                }
+            })
+        ]);
 
         const expenses: any[] = [];
 
@@ -50,6 +60,23 @@ export class AnalyticsService {
                 cedis: cedisName,
                 type,
                 cost: totalCost
+            });
+        }
+
+        // Agrupar y Calcular para canibalizaciones
+        for (const ex of exchanges) {
+            const date = new Date(ex.date);
+            const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            const cedisName = ex.vehicle?.currentCedis?.name || 'CEDIS Desconocido';
+            const costSign = ex.action === 'RETIRO' ? -1 : 1;
+            const costVal = Number(ex.cost) || 0;
+
+            expenses.push({
+                id: `ex-${ex.id}`,
+                month,
+                cedis: cedisName,
+                type: 'CORRECTIVE', // Se contabiliza bajo correctivo
+                cost: costVal * costSign
             });
         }
 
@@ -137,13 +164,16 @@ export class AnalyticsService {
     }
 
     async getGlobalSummary() {
-        const [scheduled, maintenances, vehicles, faults] = await Promise.all([
+        const [scheduled, maintenances, vehicles, faults, exchanges] = await Promise.all([
             this.prisma.scheduledMaintenance.findMany(),
             this.prisma.maintenance.findMany({
                 include: { tickets: { include: { items: true } }, parts: true }
             }),
             this.prisma.vehicle.findMany(),
-            this.prisma.fault.findMany()
+            this.prisma.fault.findMany(),
+            this.prisma.partExchange.findMany({
+                where: { isActive: true }
+            })
         ]);
 
         // Compliance
@@ -196,6 +226,20 @@ export class AnalyticsService {
             }
         });
 
+        // Add exchanges to parts costs and monthly breakdown
+        exchanges.forEach(ex => {
+            const costVal = Number(ex.cost) || 0;
+            if (costVal > 0) {
+                const costSign = ex.action === 'RETIRO' ? -1 : 1;
+                const valueChange = costVal * costSign;
+                totalParts += valueChange;
+
+                const mKey = new Date(ex.date).toISOString().slice(0, 7);
+                if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0, preventiveCount: 0, correctiveCount: 0 };
+                monthlyExpenses[mKey].corrective += valueChange;
+            }
+        });
+
         // Stats by Unit (Faults and Cost)
         const vehicleStats: Record<number, { faultCount: number, cost: number }> = {};
         vehicles.forEach(v => {
@@ -223,6 +267,17 @@ export class AnalyticsService {
             });
             if (vehicleStats[m.vehicleId]) {
                 vehicleStats[m.vehicleId].cost += mTotal;
+            }
+        });
+
+        exchanges.forEach(ex => {
+            const costVal = Number(ex.cost) || 0;
+            if (costVal > 0) {
+                const costSign = ex.action === 'RETIRO' ? -1 : 1;
+                const valueChange = costVal * costSign;
+                if (vehicleStats[ex.vehicleId]) {
+                    vehicleStats[ex.vehicleId].cost += valueChange;
+                }
             }
         });
 

@@ -72,8 +72,17 @@ export class MaintenanceController {
             date: data.date ? new Date(data.date) : new Date(),
             action: data.action,
             description: data.description,
+            cost: data.cost ? Number(data.cost) : undefined,
         };
         return this.maintenanceService.recordPartExchange(payload, files);
+    }
+
+    @Get('product-cost-history')
+    getProductCostHistory(
+        @Query('vehicleId', ParseIntPipe) vehicleId: number,
+        @Query('productId', ParseIntPipe) productId: number
+    ) {
+        return this.maintenanceService.getProductCostHistory(vehicleId, productId);
     }
 
     @Delete('log/:id')

@@ -275,7 +275,8 @@ export class VehiclesService {
                     meta: { 
                         product: ex.product.name, 
                         productCode: ex.product.code, 
-                        action: ex.action 
+                        action: ex.action,
+                        cost: ex.cost ? Number(ex.cost) : 0
                     },
                     evidence: ex.evidence?.map(e => e.url) || []
                 };

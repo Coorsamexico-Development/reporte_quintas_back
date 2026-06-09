@@ -355,6 +355,7 @@ model PartExchange {
   productId   Int
   action      String
   quantity    Int                    @default(1)
+  cost        Decimal?               @default(0.0)
   date        DateTime               @default(now())
   description String                 @db.Text
   isActive    Boolean                @default(true)
