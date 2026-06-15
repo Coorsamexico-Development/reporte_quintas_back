@@ -90,6 +90,54 @@ async function main() {
   }
   console.log(`- ${products.length} productos/refacciones creados/verificados.`);
 
+  // 5. Roles y Permisos
+  console.log('Creando roles por defecto...');
+  await prisma.role.upsert({
+    where: { name: 'ADMIN' },
+    update: {},
+    create: {
+      name: 'ADMIN',
+      description: 'Administrador con acceso completo a todos los recursos y configuraciones.',
+      permissions: {
+        vehicles: { create: true, read: true, update: true, delete: true },
+        users: { create: true, read: true, update: true, delete: true },
+        catalogs: { create: true, read: true, update: true, delete: true },
+        customerPanel: { read: true }
+      }
+    }
+  });
+
+  await prisma.role.upsert({
+    where: { name: 'OPERATOR' },
+    update: {},
+    create: {
+      name: 'OPERATOR',
+      description: 'Operador del sistema con permisos básicos.',
+      permissions: {
+        vehicles: { create: false, read: true, update: true, delete: false },
+        users: { create: false, read: false, update: false, delete: false },
+        catalogs: { create: false, read: true, update: false, delete: false },
+        customerPanel: { read: false }
+      }
+    }
+  });
+
+  await prisma.role.upsert({
+    where: { name: 'CLIENTE' },
+    update: {},
+    create: {
+      name: 'CLIENTE',
+      description: 'Rol para visualización externa limitada a CEDIS asignados.',
+      permissions: {
+        vehicles: { create: false, read: false, update: false, delete: false },
+        users: { create: false, read: false, update: false, delete: false },
+        catalogs: { create: false, read: false, update: false, delete: false },
+        customerPanel: { read: true }
+      }
+    }
+  });
+  console.log('- Roles ADMIN, OPERATOR y CLIENTE creados/verificados.');
+
   console.log('Seeding completado con éxito.');
 }
 

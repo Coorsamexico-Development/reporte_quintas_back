@@ -78,12 +78,18 @@ export class FaultsService {
     }
   }
 
-  async getAlerts() {
+  async getAlerts(allowedCedis?: number[]) {
     try {
       const now = new Date();
       
       const pendingFaults = await this.db.fault.findMany({
-        where: { status: FaultStatus.PENDING, isActive: true },
+        where: { 
+          status: FaultStatus.PENDING, 
+          isActive: true,
+          vehicle: allowedCedis && allowedCedis.length > 0 ? {
+            currentCedisId: { in: allowedCedis.map(Number) }
+          } : undefined
+        },
         include: { vehicle: { select: { plate: true, truckNumber: true } } },
         orderBy: { reportedAt: 'asc' },
       });

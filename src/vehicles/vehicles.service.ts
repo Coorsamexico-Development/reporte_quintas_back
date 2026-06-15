@@ -10,9 +10,14 @@ export class VehiclesService {
         private storageService: StorageService
     ) { }
 
-    async findAll() {
+    async findAll(allowedCedis?: number[]) {
         return this.prisma.vehicle.findMany({
-            where: { isActive: true },
+            where: { 
+                isActive: true,
+                currentCedisId: allowedCedis && allowedCedis.length > 0 ? {
+                    in: allowedCedis.map(Number)
+                } : undefined
+            },
             include: {
                 currentCedis: true,
                 brand: true,
@@ -25,7 +30,7 @@ export class VehiclesService {
         });
     }
 
-    async findOne(id: number) {
+    async findOne(id: number, allowedCedis?: number[]) {
         const vehicle = await this.prisma.vehicle.findUnique({
             where: { id },
             include: {
@@ -52,6 +57,12 @@ export class VehiclesService {
         });
 
         if (!vehicle) throw new NotFoundException('Vehicle not found');
+
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (!vehicle.currentCedisId || !allowedCedis.map(Number).includes(vehicle.currentCedisId)) {
+                throw new NotFoundException('Vehicle not found');
+            }
+        }
 
         // Sign URLs
         if (vehicle.maintenanceLogs) {
@@ -176,7 +187,13 @@ export class VehiclesService {
             return movement;
         });
     }
-    async getVehicleHistory(id: number) {
+    async getVehicleHistory(id: number, allowedCedis?: number[]) {
+        if (allowedCedis && allowedCedis.length > 0) {
+            const vehicle = await this.prisma.vehicle.findUnique({ where: { id }, select: { currentCedisId: true } });
+            if (!vehicle || !vehicle.currentCedisId || !allowedCedis.map(Number).includes(vehicle.currentCedisId)) {
+                throw new NotFoundException('Vehicle not found');
+            }
+        }
         const vehicle = await this.prisma.vehicle.findUnique({
             where: { id },
             include: {

@@ -1,33 +1,37 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { VehiclesService } from './vehicles.service';
-import { VehicleStatus, Role } from '@prisma/client';
+import { VehicleStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { RequirePermissions } from '../auth/permissions.decorator';
 
 @Controller('vehicles')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class VehiclesController {
     constructor(private readonly vehiclesService: VehiclesService) { }
 
     @Get()
-    findAll() {
-        return this.vehiclesService.findAll();
+    @RequirePermissions('vehicles:read')
+    findAll(@Request() req) {
+        return this.vehiclesService.findAll(req.user?.allowedCedis);
     }
 
     @Get(':id')
-    findOne(@Param('id', ParseIntPipe) id: number) {
-        return this.vehiclesService.findOne(id);
+    @RequirePermissions('vehicles:read')
+    findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
+        return this.vehiclesService.findOne(id, req.user?.allowedCedis);
     }
 
     @Get(':id/history')
-    @UseGuards(JwtAuthGuard)
-    async getHistory(@Param('id', ParseIntPipe) id: number) {
-        return this.vehiclesService.getVehicleHistory(id);
+    @RequirePermissions('vehicles:read')
+    async getHistory(@Param('id', ParseIntPipe) id: number, @Request() req) {
+        return this.vehiclesService.getVehicleHistory(id, req.user?.allowedCedis);
     }
 
     @Get('history/check-association/:type/:id')
-    @UseGuards(JwtAuthGuard)
+    @RequirePermissions('vehicles:read')
     async checkAssociation(
         @Param('type') type: string,
         @Param('id', ParseIntPipe) id: number
@@ -36,7 +40,7 @@ export class VehiclesController {
     }
 
     @Post()
-    @Roles(Role.ADMIN)
+    @RequirePermissions('vehicles:create')
     create(
         @Body()
         data: {
@@ -50,7 +54,7 @@ export class VehiclesController {
     }
 
     @Put(':id')
-    @Roles(Role.ADMIN)
+    @RequirePermissions('vehicles:update')
     update(
         @Param('id', ParseIntPipe) id: number,
         @Body() data: { 
@@ -68,7 +72,7 @@ export class VehiclesController {
     }
 
     @Post(':id/move')
-    @UseGuards(JwtAuthGuard)
+    @RequirePermissions('vehicles:update')
     moveVehicle(
         @Param('id', ParseIntPipe) id: number,
         @Body() data: { toCedisId: number; reason?: string },
@@ -78,13 +82,13 @@ export class VehiclesController {
     }
 
     @Delete('movement/:id')
-    @UseGuards(JwtAuthGuard)
+    @RequirePermissions('vehicles:delete')
     deleteMovement(@Param('id', ParseIntPipe) id: number) {
         return this.vehiclesService.deleteMovement(id);
     }
 
     @Delete(':id')
-    @Roles(Role.ADMIN)
+    @RequirePermissions('vehicles:delete')
     remove(@Param('id', ParseIntPipe) id: number) {
         return this.vehiclesService.remove(id);
     }

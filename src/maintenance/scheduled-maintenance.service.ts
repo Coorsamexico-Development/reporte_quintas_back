@@ -45,12 +45,15 @@ export class ScheduledMaintenanceService {
     });
   }
 
-  async findAll(status?: MaintenanceStatus, vehicleId?: number) {
+  async findAll(status?: MaintenanceStatus, vehicleId?: number, allowedCedis?: number[]) {
     return this.prisma.scheduledMaintenance.findMany({
       where: {
         status: status || undefined,
         vehicleId: vehicleId ? +vehicleId : undefined,
         isActive: true,
+        vehicle: allowedCedis && allowedCedis.length > 0 ? {
+          currentCedisId: { in: allowedCedis.map(Number) }
+        } : undefined
       },
       include: {
         vehicle: true,
@@ -118,12 +121,15 @@ export class ScheduledMaintenanceService {
     });
   }
 
-  async getAlerts() {
+  async getAlerts(allowedCedis?: number[]) {
     // Alertas son los pendientes o vencidos (fecha <= hoy + 7 días por ejemplo, o simplemente PENDING)
     return this.prisma.scheduledMaintenance.findMany({
       where: {
         status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         isActive: true,
+        vehicle: allowedCedis && allowedCedis.length > 0 ? {
+          currentCedisId: { in: allowedCedis.map(Number) }
+        } : undefined
       },
       include: {
         vehicle: true,

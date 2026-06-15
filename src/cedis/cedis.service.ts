@@ -5,8 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CedisService {
     constructor(private prisma: PrismaService) { }
 
-    async findAll() {
+    async findAll(allowedCedis?: number[]) {
         return this.prisma.cedis.findMany({
+            where: allowedCedis && allowedCedis.length > 0 ? {
+                id: { in: allowedCedis.map(Number) }
+            } : undefined,
             include: {
                 _count: {
                     select: { currentVehicles: true },
@@ -15,7 +18,10 @@ export class CedisService {
         });
     }
 
-    async findOne(id: number) {
+    async findOne(id: number, allowedCedis?: number[]) {
+        if (allowedCedis && allowedCedis.length > 0 && !allowedCedis.map(Number).includes(id)) {
+            return null;
+        }
         return this.prisma.cedis.findUnique({
             where: { id },
             include: {
