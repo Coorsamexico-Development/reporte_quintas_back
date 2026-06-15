@@ -331,12 +331,15 @@ export class MaintenanceService {
         });
     }
 
-    async getLogs(vehicleId?: number, providerId?: number) {
+    async getLogs(vehicleId?: number, providerId?: number, allowedCedis?: number[]) {
         const logs = await this.prisma.maintenance.findMany({
             where: {
                 vehicleId: vehicleId ? +vehicleId : undefined,
                 providerId: providerId ? +providerId : undefined,
                 isActive: true, // <--- Filter!
+                vehicle: allowedCedis && allowedCedis.length > 0 ? {
+                    currentCedisId: { in: allowedCedis.map(Number) }
+                } : undefined
             },
             include: {
                 vehicle: true,

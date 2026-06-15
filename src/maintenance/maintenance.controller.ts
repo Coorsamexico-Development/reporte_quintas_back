@@ -39,8 +39,9 @@ export class MaintenanceController {
     getLogs(
         @Query('vehicleId') vehicleId?: number,
         @Query('providerId') providerId?: number,
+        @Req() req?: any
     ) {
-        return this.maintenanceService.getLogs(vehicleId, providerId);
+        return this.maintenanceService.getLogs(vehicleId, providerId, req?.user?.allowedCedis);
     }
 
     @Post('tire-rotation')
