@@ -85,6 +85,84 @@ export class InventoryService {
         });
     }
 
+    async adjustMovement(movementId: number, data: {
+        newQuantity: number;
+        newUnitPrice?: number;
+        reason: string;
+        userId: number;
+    }) {
+        if (data.newQuantity < 0) {
+            throw new BadRequestException('Quantity cannot be negative');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            const movement = await tx.inventoryMovement.findUnique({
+                where: { id: movementId },
+            });
+
+            if (!movement) {
+                throw new BadRequestException('Movement not found');
+            }
+
+            const oldQuantity = movement.quantity;
+            const oldUnitPrice = movement.unitPrice ? Number(movement.unitPrice) : null;
+            const newUnitPrice = data.newUnitPrice !== undefined ? data.newUnitPrice : oldUnitPrice;
+
+            const isIncreasing = ([
+                InventoryStartType.PURCHASE,
+                InventoryStartType.TRANSFER_IN,
+                InventoryStartType.ADJUSTMENT,
+            ] as InventoryStartType[]).includes(movement.type);
+
+            const sign = isIncreasing ? 1 : -1;
+            const deltaQuantity = (data.newQuantity - oldQuantity) * sign;
+
+            const adjustment = await tx.inventoryMovementAdjustment.create({
+                data: {
+                    inventoryMovementId: movementId,
+                    previousQuantity: oldQuantity,
+                    newQuantity: data.newQuantity,
+                    previousUnitPrice: oldUnitPrice,
+                    newUnitPrice: newUnitPrice,
+                    reason: data.reason,
+                    userId: data.userId,
+                },
+            });
+
+            await tx.inventoryMovement.update({
+                where: { id: movementId },
+                data: {
+                    quantity: data.newQuantity,
+                    unitPrice: newUnitPrice,
+                    totalCost: newUnitPrice ? newUnitPrice * data.newQuantity : null,
+                },
+            });
+
+            const stock = await tx.inventoryStock.upsert({
+                where: {
+                    cedisId_productId: {
+                        cedisId: movement.cedisId,
+                        productId: movement.productId,
+                    },
+                },
+                update: {
+                    quantity: { increment: deltaQuantity },
+                },
+                create: {
+                    cedisId: movement.cedisId,
+                    productId: movement.productId,
+                    quantity: deltaQuantity < 0 ? 0 : deltaQuantity,
+                },
+            });
+
+            if (stock.quantity < 0) {
+                throw new BadRequestException('Insufficient stock for this adjustment');
+            }
+
+            return { adjustment, stock };
+        });
+    }
+
     async getMovements(cedisId?: number, productId?: number) {
         return this.prisma.inventoryMovement.findMany({
             where: {
@@ -96,6 +174,14 @@ export class InventoryService {
                 cedis: true,
                 user: true,
                 evidence: true,
+                adjustments: {
+                    include: {
+                        user: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                },
             },
             orderBy: { date: 'desc' },
         });

@@ -18,9 +18,10 @@ model User {
   allowedCedis       Cedis[]             @relation("UserAllowedCedis")
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-  inventoryMovements InventoryMovement[]
-  maintenanceLogs    Maintenance[]
-  vehicleMovements   VehicleMovement[]
+  inventoryMovements           InventoryMovement[]
+  maintenanceLogs              Maintenance[]
+  vehicleMovements             VehicleMovement[]
+  inventoryMovementAdjustments InventoryMovementAdjustment[]
 }
 
 model Cedis {
@@ -322,8 +323,9 @@ model InventoryMovement {
   notes     String?                     @db.Text
   cedis     Cedis                       @relation(fields: [cedisId], references: [id])
   product   Product                     @relation(fields: [productId], references: [id])
-  user      User?                       @relation(fields: [userId], references: [id])
-  evidence  InventoryMovementEvidence[]
+  user        User?                       @relation(fields: [userId], references: [id])
+  evidence    InventoryMovementEvidence[]
+  adjustments InventoryMovementAdjustment[]
 
   @@index([cedisId], map: "InventoryMovement_cedisId_fkey")
   @@index([productId], map: "InventoryMovement_productId_fkey")
@@ -338,6 +340,24 @@ model InventoryMovementEvidence {
   movement   InventoryMovement @relation(fields: [movementId], references: [id])
 
   @@index([movementId], map: "InventoryMovementEvidence_movementId_fkey")
+}
+
+model InventoryMovementAdjustment {
+  id                  Int               @id @default(autoincrement())
+  inventoryMovementId Int
+  previousQuantity    Int
+  newQuantity         Int
+  previousUnitPrice   Decimal?
+  newUnitPrice        Decimal?
+  reason              String            @db.Text
+  userId              Int
+  createdAt           DateTime          @default(now())
+
+  inventoryMovement   InventoryMovement @relation(fields: [inventoryMovementId], references: [id], onDelete: Cascade)
+  user                User              @relation(fields: [userId], references: [id])
+
+  @@index([inventoryMovementId])
+  @@index([userId])
 }
 
 model TireRotation {

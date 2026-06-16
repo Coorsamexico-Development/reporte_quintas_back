@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles, Req, Param } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { InventoryService } from './inventory.service';
 import { InventoryStartType } from '@prisma/client';
@@ -29,6 +29,21 @@ export class InventoryController {
             notes: body.notes,
         };
         return this.inventoryService.recordMovement(data, files);
+    }
+
+    @Post('movement/:id/adjust')
+    adjustMovement(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: { newQuantity: number; newUnitPrice?: number; reason: string },
+        @Req() req: any
+    ) {
+        const userId = req.user.userId;
+        return this.inventoryService.adjustMovement(id, {
+            newQuantity: Number(body.newQuantity),
+            newUnitPrice: body.newUnitPrice !== undefined ? Number(body.newUnitPrice) : undefined,
+            reason: body.reason,
+            userId,
+        });
     }
 
     @Get('movements')
