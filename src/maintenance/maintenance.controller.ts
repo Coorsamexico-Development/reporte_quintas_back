@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Query, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, ParseIntPipe, UseInterceptors, UploadedFiles, Req } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceType, MaintenanceStatus } from '@prisma/client';
 import { UseGuards } from '@nestjs/common';
@@ -13,31 +14,34 @@ export class MaintenanceController {
 
     @Post('log')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     createLog(
-        @Body()
-        data: {
-            vehicleId: number;
-            type: MaintenanceType;
-            description: string;
-            date: Date;
-            status: MaintenanceStatus;
-            providerId?: number;
-            userId?: number;
-            evidenceUrls?: string[];
-            tickets?: { ticketNumber: string; cost: number }[];
-            parts?: { productId: number; quantity: number; cost: number }[];
-        },
+        @UploadedFiles() files: Express.Multer.File[],
+        @Body() data: any,
+        @Req() req: any
     ) {
         if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.createLog(data);
+        return this.maintenanceService.createLog(data, files, req.user?.userId);
+    }
+
+    @Put('log/:id')
+    @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
+    updateLog(
+        @Param('id', ParseIntPipe) id: number,
+        @UploadedFiles() files: Express.Multer.File[],
+        @Body() data: any
+    ) {
+        return this.maintenanceService.updateLog(id, data, files);
     }
 
     @Get('logs')
     getLogs(
         @Query('vehicleId') vehicleId?: number,
         @Query('providerId') providerId?: number,
+        @Req() req?: any
     ) {
-        return this.maintenanceService.getLogs(vehicleId, providerId);
+        return this.maintenanceService.getLogs(vehicleId, providerId, req?.user?.allowedCedis);
     }
 
     @Post('tire-rotation')
@@ -57,17 +61,50 @@ export class MaintenanceController {
 
     @Post('part-exchange')
     @Roles('ADMIN')
+    @UseInterceptors(FilesInterceptor('evidence'))
     recordPartExchange(
-        @Body()
-        data: {
-            vehicleId: number;
-            date: Date;
-            productId: number;
-            action: string;
-            description: string;
-        },
+        @UploadedFiles() files: Express.Multer.File[],
+        @Body() data: any,
     ) {
-        if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.recordPartExchange(data);
+        const payload = {
+            vehicleId: Number(data.vehicleId),
+            productId: Number(data.productId),
+            targetVehicleId: data.targetVehicleId ? Number(data.targetVehicleId) : undefined,
+            date: data.date ? new Date(data.date) : new Date(),
+            action: data.action,
+            description: data.description,
+            cost: data.cost ? Number(data.cost) : undefined,
+        };
+        return this.maintenanceService.recordPartExchange(payload, files);
+    }
+
+    @Get('product-cost-history')
+    getProductCostHistory(
+        @Query('vehicleId', ParseIntPipe) vehicleId: number,
+        @Query('productId', ParseIntPipe) productId: number
+    ) {
+        return this.maintenanceService.getProductCostHistory(vehicleId, productId);
+    }
+
+    @Delete('log/:id')
+    @Roles('ADMIN')
+    deleteLog(
+        @Param('id', ParseIntPipe) id: number,
+        @Query('unlink') unlink?: string
+    ) {
+        const shouldUnlink = unlink !== 'false';
+        return this.maintenanceService.deleteLog(id, shouldUnlink);
+    }
+
+    @Delete('part-exchange/:id')
+    @Roles('ADMIN')
+    deletePartExchange(@Param('id', ParseIntPipe) id: number) {
+        return this.maintenanceService.deletePartExchange(id);
+    }
+
+    @Delete('tire-rotation/:id')
+    @Roles('ADMIN')
+    deleteTireRotation(@Param('id', ParseIntPipe) id: number) {
+        return this.maintenanceService.deleteTireRotation(id);
     }
 }

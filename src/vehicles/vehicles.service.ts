@@ -1,15 +1,28 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { VehicleStatus } from '@prisma/client';
 
 @Injectable()
 export class VehiclesService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private storageService: StorageService
+    ) { }
 
-    async findAll() {
+    async findAll(allowedCedis?: number[]) {
         return this.prisma.vehicle.findMany({
+            where: { 
+                isActive: true,
+                currentCedisId: allowedCedis && allowedCedis.length > 0 ? {
+                    in: allowedCedis.map(Number)
+                } : undefined
+            },
             include: {
                 currentCedis: true,
+                brand: true,
+                transmissionRel: true,
+                fuelTypeRel: true,
                 _count: {
                     select: { documents: true, maintenanceLogs: true },
                 },
@@ -17,41 +30,152 @@ export class VehiclesService {
         });
     }
 
-    async findOne(id: number) {
+    async findOne(id: number, allowedCedis?: number[]) {
         const vehicle = await this.prisma.vehicle.findUnique({
             where: { id },
             include: {
                 currentCedis: true,
+                brand: true,
+                transmissionRel: true,
+                fuelTypeRel: true,
                 documents: {
                     include: { type: true, evidence: true },
                 },
                 maintenanceLogs: {
-                    include: { provider: true, user: true, evidence: true },
+                    include: { provider: true, user: true, evidence: true, tickets: { include: { items: true } } },
                 },
                 movementHistory: {
                     include: { fromCedis: true, toCedis: true, user: true },
                     orderBy: { date: 'desc' },
                 },
                 tireRotations: true,
-                partExchanges: true,
+                partExchanges: {
+                    include: { product: true, evidence: true }
+                },
+                faults: true
             },
         });
 
         if (!vehicle) throw new NotFoundException('Vehicle not found');
+
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (!vehicle.currentCedisId || !allowedCedis.map(Number).includes(vehicle.currentCedisId)) {
+                throw new NotFoundException('Vehicle not found');
+            }
+        }
+
+        // Sign URLs
+        if (vehicle.maintenanceLogs) {
+            for (const log of vehicle.maintenanceLogs) {
+                if (log.evidence) {
+                    log.evidence = await Promise.all(
+                        log.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
+        if (vehicle.documents) {
+            for (const doc of vehicle.documents) {
+                if (doc.evidence) {
+                    doc.evidence = await Promise.all(
+                        doc.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
+        if (vehicle.partExchanges) {
+            for (const ex of vehicle.partExchanges) {
+                if (ex.evidence) {
+                    ex.evidence = await Promise.all(
+                        ex.evidence.map(async (e) => ({
+                            ...e,
+                            url: await this.storageService.getViewUrl(e.url)
+                        }))
+                    );
+                }
+            }
+        }
+
         return vehicle;
     }
 
-    async create(data: { plate: string; truckNumber: string; status: VehicleStatus; currentCedisId?: number }) {
-        return this.prisma.vehicle.create({
-            data,
-        });
+    async create(data: { 
+        plate: string; 
+        truckNumber: string; 
+        status: VehicleStatus; 
+        currentCedisId?: number;
+        brandId?: number;
+        transmissionId?: number;
+        fuelTypeId?: number;
+        engine?: string;
+        yearModel?: number;
+        vin?: string;
+    }) {
+        // Sanear cadenas vacías a null para campos únicos/opcionales
+        const createData: any = { ...data };
+        if (createData.vin === '') createData.vin = null;
+        if (createData.engine === '') createData.engine = null;
+
+        try {
+            return await this.prisma.vehicle.create({
+                data: createData,
+            });
+        } catch (error) {
+            if (error.code === 'P2002') {
+                const target = error.meta?.target || '';
+                if (target.includes('plate')) throw new BadRequestException('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new BadRequestException('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new BadRequestException('Ya existe un vehículo con ese número VIN');
+                throw new BadRequestException('Ya existe un registro con esos datos únicos');
+            }
+            if (error.code === 'P2003') {
+                throw new BadRequestException('Error de llave foránea: Uno de los IDs de referencia (CEDIS, marca, transmisión o combustible) no existe');
+            }
+            throw new BadRequestException(error.message || 'Error interno al crear el vehículo');
+        }
     }
 
-    async update(id: number, data: { plate?: string; truckNumber?: string; status?: VehicleStatus }) {
-        return this.prisma.vehicle.update({
-            where: { id },
-            data,
-        });
+    async update(id: number, data: { 
+        plate?: string; 
+        truckNumber?: string; 
+        status?: VehicleStatus;
+        engine?: string;
+        yearModel?: number;
+        vin?: string;
+        currentCedisId?: number;
+        brandId?: number;
+    }) {
+        // Sanear cadenas vacías a null
+        const updateData: any = { ...data };
+        if (updateData.vin === '') updateData.vin = null;
+        if (updateData.engine === '') updateData.engine = null;
+
+        try {
+            return await this.prisma.vehicle.update({
+                where: { id },
+                data: updateData,
+            });
+        } catch (error) {
+            if (error.code === 'P2002') {
+                const target = error.meta?.target || '';
+                if (target.includes('plate')) throw new BadRequestException('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new BadRequestException('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new BadRequestException('Ya existe un vehículo con ese número VIN');
+                throw new BadRequestException('Ya existe un registro con esos datos únicos');
+            }
+            if (error.code === 'P2003') {
+                throw new BadRequestException('Error de llave foránea: Uno de los IDs de referencia (CEDIS, marca, transmisión o combustible) no existe');
+            }
+            throw new BadRequestException(error.message || 'Error interno al actualizar el vehículo');
+        }
     }
 
     async moveVehicle(vehicleId: number, toCedisId: number, userId: number, reason?: string) {
@@ -77,6 +201,215 @@ export class VehiclesService {
             });
 
             return movement;
+        });
+    }
+    async getVehicleHistory(id: number, allowedCedis?: number[]) {
+        if (allowedCedis && allowedCedis.length > 0) {
+            const vehicle = await this.prisma.vehicle.findUnique({ where: { id }, select: { currentCedisId: true } });
+            if (!vehicle || !vehicle.currentCedisId || !allowedCedis.map(Number).includes(vehicle.currentCedisId)) {
+                throw new NotFoundException('Vehicle not found');
+            }
+        }
+        const vehicle = await this.prisma.vehicle.findUnique({
+            where: { id },
+            include: {
+                maintenanceLogs: {
+                    where: { isActive: true },
+                    include: { 
+                        provider: true, 
+                        user: true, 
+                        evidence: true, 
+                        tickets: { include: { items: true } },
+                        parts: { include: { product: true } }
+                    },
+                    orderBy: { date: 'desc' }
+                },
+                movementHistory: {
+                    where: { isActive: true },
+                    include: { fromCedis: true, toCedis: true, user: true, evidence: true },
+                    orderBy: { date: 'desc' }
+                },
+                faults: {
+                    where: { isActive: true },
+                    include: { evidence: true },
+                    orderBy: { reportedAt: 'desc' }
+                },
+                partExchanges: {
+                    where: { isActive: true },
+                    include: { product: true, evidence: true },
+                    orderBy: { date: 'desc' }
+                },
+                tireRotations: {
+                    where: { isActive: true },
+                    orderBy: { date: 'desc' }
+                },
+                scheduledMaintenances: {
+                    where: { isActive: true },
+                    orderBy: { date: 'desc' }
+                }
+            }
+        });
+
+        if (!vehicle) throw new NotFoundException('Vehicle not found');
+
+        // Map and sort all events into a single timeline
+        const rawEvents: any[] = [
+            ...vehicle.maintenanceLogs.map(log => ({
+                id: `maintenance-${log.id}`,
+                type: 'MAINTENANCE',
+                logId: log.id,
+                date: log.endDate || log.date,
+                title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                description: log.description,
+                user: log.user?.name,
+                meta: { 
+                    provider: log.provider,
+                    status: log.status, 
+                    tickets: log.tickets,
+                    parts: log.parts,
+                    type: log.type,
+                    endDate: log.endDate,
+                    inactiveDays: log.inactiveDays,
+                    inactiveHours: log.inactiveHours
+                },
+                evidence: log.evidence.map(e => e.url)
+            })),
+            ...vehicle.movementHistory.map(mov => ({
+                id: `movement-${mov.id}`,
+                type: 'MOVEMENT',
+                date: mov.date,
+                title: 'Movimiento de CEDIS',
+                description: mov.reason || `Traslado de ${mov.fromCedis?.name || 'Origen desconocido'} a ${mov.toCedis.name}`,
+                user: mov.user.name,
+                meta: { from: mov.fromCedis?.name, to: mov.toCedis.name },
+                evidence: mov.evidence.map(e => e.url)
+            })),
+            ...vehicle.faults.map(fault => ({
+                id: `fault-${fault.id}`,
+                type: 'FAULT',
+                date: fault.reportedAt,
+                title: 'Reporte de Avería',
+                description: fault.description,
+                meta: { 
+                    severity: fault.severity, 
+                    status: fault.status,
+                    resolvedAt: fault.resolvedAt 
+                },
+                evidence: fault.evidence.map(e => e.url)
+            })),
+            ...vehicle.partExchanges.map(ex => {
+                const actionLabel = ex.action === 'REMOVED' || ex.action === 'RETIRO' ? 'Retiro' : 'Instalación';
+                return {
+                    id: `exchange-${ex.id}`,
+                    type: 'PART_EXCHANGE',
+                    date: ex.date,
+                    title: `Canibalización: ${actionLabel} de ${ex.product.name}`,
+                    description: ex.description,
+                    meta: { 
+                        product: ex.product.name, 
+                        productCode: ex.product.code, 
+                        action: ex.action,
+                        cost: ex.cost ? Number(ex.cost) : 0
+                    },
+                    evidence: ex.evidence?.map(e => e.url) || []
+                };
+            }),
+            ...vehicle.tireRotations.map(rot => ({
+                id: `tire-${rot.id}`,
+                type: 'TIRE_ROTATION',
+                date: rot.date,
+                title: 'Rotación de Llantas',
+                description: rot.description,
+                meta: { mileage: rot.mileage }
+            })),
+            ...vehicle.scheduledMaintenances.map(sched => ({
+                id: `scheduled-${sched.id}`,
+                type: 'SCHEDULED_MAINTENANCE',
+                date: sched.date,
+                title: 'Programación: ' + (sched.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                description: sched.description,
+                meta: { status: sched.status },
+            })),
+            {
+                id: `alta-${vehicle.id}`,
+                type: 'ALTA',
+                date: vehicle.createdAt,
+                title: 'Alta de Unidad',
+                description: `Ingreso de la unidad ${vehicle.truckNumber} al sistema.`,
+                meta: { plate: vehicle.plate }
+            }
+        ];
+
+        // Ensure all evidence URLs are signed/authorized for view
+        const events = await Promise.all(
+            rawEvents.map(async (event) => {
+                if (event.evidence && event.evidence.length > 0) {
+                    const signedEvidence = await Promise.all(
+                        event.evidence.map((url: string) => this.storageService.getViewUrl(url))
+                    );
+                    return { ...event, evidence: signedEvidence };
+                }
+                return event;
+            })
+        );
+
+        return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    async checkEventAssociation(type: string, id: number) {
+        const cleanType = type.toUpperCase();
+        if (cleanType === 'FAULT') {
+            const fault = await this.prisma.fault.findUnique({
+                where: { id },
+                include: { maintenance: true }
+            });
+            if (fault && fault.maintenanceId && fault.maintenance?.isActive) {
+                return {
+                    hasAssociation: true,
+                    message: `Esta avería está asociada al Mantenimiento #${fault.maintenanceId} (${fault.maintenance.description.substring(0, 50)}...).`,
+                    associationType: 'MAINTENANCE',
+                    associationId: fault.maintenanceId
+                };
+            }
+        } else if (cleanType === 'MAINTENANCE') {
+            const activeFaults = await this.prisma.fault.findMany({
+                where: { maintenanceId: id, isActive: true }
+            });
+            if (activeFaults.length > 0) {
+                return {
+                    hasAssociation: true,
+                    message: `Este mantenimiento resolvió las siguientes averías activas: ${activeFaults.map(f => `"${f.title}"`).join(', ')}.`,
+                    associationType: 'FAULT',
+                    associatedItems: activeFaults.map(f => ({ id: f.id, title: f.title }))
+                };
+            }
+        } else if (cleanType === 'SCHEDULED_MAINTENANCE') {
+            const linkedMaint = await this.prisma.maintenance.findFirst({
+                where: { scheduledMaintenanceId: id, isActive: true }
+            });
+            if (linkedMaint) {
+                return {
+                    hasAssociation: true,
+                    message: `Esta programación está vinculada al Mantenimiento registrado #${linkedMaint.id}.`,
+                    associationType: 'MAINTENANCE',
+                    associationId: linkedMaint.id
+                };
+            }
+        }
+        return { hasAssociation: false };
+    }
+
+    async deleteMovement(id: number) {
+        return this.prisma.vehicleMovement.update({
+            where: { id },
+            data: { isActive: false }
+        });
+    }
+
+    async remove(id: number) {
+        return this.prisma.vehicle.update({
+            where: { id },
+            data: { isActive: false }
         });
     }
 }

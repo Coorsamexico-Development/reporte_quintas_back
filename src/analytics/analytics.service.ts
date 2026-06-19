@@ -6,15 +6,25 @@ export class AnalyticsService {
     constructor(private readonly prisma: PrismaService) { }
 
     async getExpenses() {
-        const maintenances = await this.prisma.maintenance.findMany({
-            include: {
-                vehicle: {
-                    include: { currentCedis: true }
-                },
-                tickets: true,
-                parts: true
-            }
-        });
+        const [maintenances, exchanges] = await Promise.all([
+            this.prisma.maintenance.findMany({
+                include: {
+                    vehicle: {
+                        include: { currentCedis: true }
+                    },
+                    tickets: { include: { items: true } },
+                    parts: true
+                }
+            }),
+            this.prisma.partExchange.findMany({
+                where: { isActive: true, cost: { gt: 0 } },
+                include: {
+                    vehicle: {
+                        include: { currentCedis: true }
+                    }
+                }
+            })
+        ]);
 
         const expenses: any[] = [];
 
@@ -26,11 +36,20 @@ export class AnalyticsService {
             const type = m.type;
 
             let totalCost = 0;
-            // Sumar tickets
+            // Sumar tickets e items
             for (const ticket of m.tickets) {
-                totalCost += Number(ticket.cost || 0);
+                if (ticket.items && ticket.items.length > 0) {
+                    for (const item of ticket.items) {
+                        const itemParts = Number(item.cost) || 0;
+                        const itemLabor = Number(item.laborCost) || 0;
+                        const itemIva = item.hasIva ? (itemParts + itemLabor) * 0.16 : 0;
+                        totalCost += itemParts + itemLabor + itemIva;
+                    }
+                } else {
+                    totalCost += Number(ticket.cost || 0);
+                }
             }
-            // Sumar partes
+            // Sumar partes de inventario
             for (const part of m.parts) {
                 totalCost += (Number(part.unitCost || 0) * part.quantity);
             }
@@ -41,6 +60,23 @@ export class AnalyticsService {
                 cedis: cedisName,
                 type,
                 cost: totalCost
+            });
+        }
+
+        // Agrupar y Calcular para canibalizaciones
+        for (const ex of exchanges) {
+            const date = new Date(ex.date);
+            const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            const cedisName = ex.vehicle?.currentCedis?.name || 'CEDIS Desconocido';
+            const costSign = ex.action === 'RETIRO' ? -1 : 1;
+            const costVal = Number(ex.cost) || 0;
+
+            expenses.push({
+                id: `ex-${ex.id}`,
+                month,
+                cedis: cedisName,
+                type: 'CORRECTIVE', // Se contabiliza bajo correctivo
+                cost: costVal * costSign
             });
         }
 
@@ -67,5 +103,301 @@ export class AnalyticsService {
             raw: expenses,
             aggregated: aggregation
         };
+    }
+
+    async getRecentActivity() {
+        const [maintenances, movements, faults, exchanges] = await Promise.all([
+            this.prisma.maintenance.findMany({
+                take: 10,
+                orderBy: { date: 'desc' },
+                include: { vehicle: true }
+            }),
+            this.prisma.vehicleMovement.findMany({
+                take: 10,
+                orderBy: { date: 'desc' },
+                include: { vehicle: true, fromCedis: true, toCedis: true }
+            }),
+            this.prisma.fault.findMany({
+                take: 10,
+                orderBy: { reportedAt: 'desc' },
+                include: { vehicle: true }
+            }),
+            this.prisma.partExchange.findMany({
+                take: 10,
+                orderBy: { date: 'desc' },
+                include: { vehicle: true, product: true }
+            })
+        ]);
+
+        const events = [
+            ...maintenances.map(m => ({
+                type: 'Mantenimiento',
+                date: m.date,
+                vehicleName: `${m.vehicle.truckNumber} (${m.vehicle.plate})`,
+                description: m.description,
+                timestamp: new Date(m.date).getTime()
+            })),
+            ...movements.map(mov => ({
+                type: 'Movimiento',
+                date: mov.date,
+                vehicleName: `${mov.vehicle.truckNumber} (${mov.vehicle.plate})`,
+                description: `Traslado a ${mov.toCedis.name}`,
+                timestamp: new Date(mov.date).getTime()
+            })),
+            ...faults.map(f => ({
+                type: 'Falla Reportada',
+                date: f.reportedAt,
+                vehicleName: `${f.vehicle.truckNumber} (${f.vehicle.plate})`,
+                description: f.title,
+                timestamp: new Date(f.reportedAt).getTime()
+            })),
+            ...exchanges.map(ex => ({
+                type: 'Canibalización',
+                date: ex.date,
+                vehicleName: `${ex.vehicle.truckNumber} (${ex.vehicle.plate})`,
+                description: `${ex.action === 'REMOVED' ? 'Retiro' : 'Instalación'} de ${ex.product.name}`,
+                timestamp: new Date(ex.date).getTime()
+            }))
+        ];
+
+        return events.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
+    }
+
+    async getGlobalSummary() {
+        const [scheduled, maintenances, vehicles, faults, exchanges] = await Promise.all([
+            this.prisma.scheduledMaintenance.findMany(),
+            this.prisma.maintenance.findMany({
+                include: { tickets: { include: { items: true } }, parts: true }
+            }),
+            this.prisma.vehicle.findMany(),
+            this.prisma.fault.findMany(),
+            this.prisma.partExchange.findMany({
+                where: { isActive: true }
+            })
+        ]);
+
+        // Compliance
+        const totalScheduled = scheduled.length;
+        const totalCompleted = scheduled.filter(s => s.status === 'COMPLETED').length;
+        const complianceRate = totalScheduled > 0 ? (totalCompleted / totalScheduled) * 100 : 0;
+
+        const monthlyCompliance: Record<string, any> = {};
+        scheduled.forEach(s => {
+            const mKey = new Date(s.date).toISOString().slice(0, 7);
+            if (!monthlyCompliance[mKey]) monthlyCompliance[mKey] = { total: 0, completed: 0 };
+            monthlyCompliance[mKey].total++;
+            if (s.status === 'COMPLETED') monthlyCompliance[mKey].completed++;
+        });
+
+        // Cost Breakdown
+        let totalLabor = 0;
+        let totalParts = 0;
+        let totalExtra = 0;
+
+        const monthlyExpenses: Record<string, any> = {};
+
+        maintenances.forEach(m => {
+            let mTotal = 0;
+            m.tickets.forEach(t => {
+                t.items.forEach(i => {
+                    const labor = Number(i.laborCost) || 0;
+                    const parts = Number(i.cost) || 0;
+                    const iva = i.hasIva ? (labor + parts) * 0.16 : 0;
+                    totalLabor += labor;
+                    totalParts += parts;
+                    totalExtra += iva;
+                    mTotal += labor + parts + iva;
+                });
+            });
+            m.parts.forEach(p => {
+                const pCost = (Number(p.unitCost) || 0) * p.quantity;
+                totalParts += pCost;
+                mTotal += pCost;
+            });
+
+            const mKey = new Date(m.date).toISOString().slice(0, 7);
+            if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0, preventiveCount: 0, correctiveCount: 0 };
+            if (m.type === 'PREVENTIVE') {
+                monthlyExpenses[mKey].preventive += mTotal;
+                monthlyExpenses[mKey].preventiveCount++;
+            } else {
+                monthlyExpenses[mKey].corrective += mTotal;
+                monthlyExpenses[mKey].correctiveCount++;
+            }
+        });
+
+        // Add exchanges to parts costs and monthly breakdown
+        exchanges.forEach(ex => {
+            const costVal = Number(ex.cost) || 0;
+            if (costVal > 0) {
+                const costSign = ex.action === 'RETIRO' ? -1 : 1;
+                const valueChange = costVal * costSign;
+                totalParts += valueChange;
+
+                const mKey = new Date(ex.date).toISOString().slice(0, 7);
+                if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0, preventiveCount: 0, correctiveCount: 0 };
+                monthlyExpenses[mKey].corrective += valueChange;
+            }
+        });
+
+        // Stats by Unit (Faults and Cost)
+        const vehicleStats: Record<number, { faultCount: number, cost: number }> = {};
+        vehicles.forEach(v => {
+            vehicleStats[v.id] = { faultCount: 0, cost: 0 };
+        });
+
+        faults.forEach(f => {
+            if (vehicleStats[f.vehicleId]) {
+                vehicleStats[f.vehicleId].faultCount++;
+            }
+        });
+
+        maintenances.forEach(m => {
+            let mTotal = 0;
+            m.tickets.forEach(t => {
+                t.items.forEach(i => {
+                    const labor = Number(i.laborCost) || 0;
+                    const parts = Number(i.cost) || 0;
+                    const iva = i.hasIva ? (labor + parts) * 0.16 : 0;
+                    mTotal += labor + parts + iva;
+                });
+            });
+            m.parts.forEach(p => {
+                mTotal += (Number(p.unitCost) || 0) * p.quantity;
+            });
+            if (vehicleStats[m.vehicleId]) {
+                vehicleStats[m.vehicleId].cost += mTotal;
+            }
+        });
+
+        exchanges.forEach(ex => {
+            const costVal = Number(ex.cost) || 0;
+            if (costVal > 0) {
+                const costSign = ex.action === 'RETIRO' ? -1 : 1;
+                const valueChange = costVal * costSign;
+                if (vehicleStats[ex.vehicleId]) {
+                    vehicleStats[ex.vehicleId].cost += valueChange;
+                }
+            }
+        });
+
+        const topFaultyUnits = vehicles
+            .map(v => ({
+                id: v.id,
+                truckNumber: v.truckNumber,
+                faultCount: vehicleStats[v.id]?.faultCount || 0,
+                cost: vehicleStats[v.id]?.cost || 0
+            }))
+            .filter(v => v.faultCount > 0 || v.cost > 0)
+            .sort((a, b) => b.faultCount - a.faultCount || b.cost - a.cost)
+            .slice(0, 5);
+
+        return {
+            compliance: {
+                total: totalScheduled,
+                completed: totalCompleted,
+                rate: complianceRate,
+                monthly: monthlyCompliance
+            },
+            costs: {
+                labor: totalLabor,
+                parts: totalParts,
+                extra: totalExtra,
+                total: totalLabor + totalParts + totalExtra,
+                monthly: monthlyExpenses
+            },
+            topFaultyUnits
+        };
+    }
+
+    async getOperationalTrends() {
+        const [assignments, cedisList] = await Promise.all([
+            this.prisma.vehicleShiftAssignment.findMany({
+                include: {
+                    shift: {
+                        select: {
+                            id: true,
+                            name: true,
+                            cedisId: true,
+                            cedis: {
+                                select: {
+                                    name: true
+                                }
+                            }
+                        }
+                    }
+                },
+                orderBy: [
+                    { date: 'asc' }
+                ]
+            }),
+            this.prisma.cedis.findMany({
+                include: {
+                    shifts: {
+                        where: { isActive: true }
+                    }
+                }
+            })
+        ]);
+
+        // Map CEDIS for quick lookup
+        const cedisMap = new Map<number, any>();
+        for (const c of cedisList) {
+            cedisMap.set(c.id, c);
+        }
+
+        // Group by date, CEDIS, and shift
+        const trendsMap = new Map<string, { date: string, shiftName: string, cedisName: string, cedisId: number, operational: number, available: number, backup: number, commitment: number }>();
+
+        for (const a of assignments) {
+            const dateStr = a.date.toISOString().split('T')[0];
+            const shiftName = a.shift?.name || 'Turno';
+            const cedisName = a.shift?.cedis?.name || 'CEDIS';
+            const cedisId = a.shift?.cedisId || 0;
+            const shiftId = a.shift?.id || 0;
+            const key = `${dateStr}_${cedisId}_${shiftName}`;
+
+            if (!trendsMap.has(key)) {
+                // Calculate commitment for this date, CEDIS, and shift
+                let commitment = 0;
+                const cedisObj = cedisMap.get(cedisId);
+                if (cedisObj) {
+                    if (cedisObj.commitmentType === 'SHIFT') {
+                        const shiftObj = cedisObj.shifts.find((s: any) => s.id === shiftId);
+                        if (shiftObj) {
+                            const validUntilObj = shiftObj.validUntil ? new Date(shiftObj.validUntil) : null;
+                            const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
+                            commitment = isExpired ? (shiftObj.nextCommittedUnits ?? shiftObj.committedUnits) : shiftObj.committedUnits;
+                        }
+                    } else {
+                        const validUntilObj = cedisObj.validUntil ? new Date(cedisObj.validUntil) : null;
+                        const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
+                        commitment = isExpired ? (cedisObj.nextCommittedUnits ?? cedisObj.committedUnits) : cedisObj.committedUnits;
+                    }
+                }
+
+                trendsMap.set(key, {
+                    date: dateStr,
+                    shiftName,
+                    cedisName,
+                    cedisId,
+                    operational: 0,
+                    available: 0,
+                    backup: 0,
+                    commitment
+                });
+            }
+
+            const entry = trendsMap.get(key)!;
+            if (a.status === 'OPERATIONAL') {
+                entry.operational++;
+            } else if (a.status === 'AVAILABLE') {
+                entry.available++;
+            } else if (a.status === 'BACKUP') {
+                entry.backup++;
+            }
+        }
+
+        return Array.from(trendsMap.values());
     }
 }

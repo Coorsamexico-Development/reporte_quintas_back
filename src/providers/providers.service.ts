@@ -5,8 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ProvidersService {
     constructor(private prisma: PrismaService) { }
 
-    async findAll() {
-        return this.prisma.provider.findMany();
+    async findAll(cedisId?: number) {
+        return this.prisma.provider.findMany({
+            where: cedisId ? { cedisId } : {},
+            include: {
+                cedis: true,
+            },
+        });
     }
 
     async findOne(id: number) {

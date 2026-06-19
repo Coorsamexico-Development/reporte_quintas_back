@@ -5,17 +5,26 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CedisService {
     constructor(private prisma: PrismaService) { }
 
-    async findAll() {
+    async findAll(allowedCedis?: number[]) {
         return this.prisma.cedis.findMany({
+            where: allowedCedis && allowedCedis.length > 0 ? {
+                id: { in: allowedCedis.map(Number) }
+            } : undefined,
             include: {
                 _count: {
                     select: { currentVehicles: true },
                 },
+                shifts: {
+                    where: { isActive: true }
+                }
             },
         });
     }
 
-    async findOne(id: number) {
+    async findOne(id: number, allowedCedis?: number[]) {
+        if (allowedCedis && allowedCedis.length > 0 && !allowedCedis.map(Number).includes(id)) {
+            return null;
+        }
         return this.prisma.cedis.findUnique({
             where: { id },
             include: {
@@ -27,16 +36,20 @@ export class CedisService {
         });
     }
 
-    async create(data: { name: string; location?: string }) {
+    async create(data: { name: string; location?: string; latitude?: number; longitude?: number }) {
         return this.prisma.cedis.create({
             data,
         });
     }
 
-    async update(id: number, data: { name?: string; location?: string }) {
+    async update(id: number, data: any) {
+        const updateData = { ...data };
+        if (updateData.validUntil !== undefined) {
+            updateData.validUntil = updateData.validUntil ? new Date(updateData.validUntil) : null;
+        }
         return this.prisma.cedis.update({
             where: { id },
-            data,
+            data: updateData,
         });
     }
 

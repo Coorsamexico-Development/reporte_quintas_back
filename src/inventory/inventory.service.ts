@@ -1,10 +1,14 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryStartType } from '@prisma/client';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class InventoryService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private storageService: StorageService
+    ) { }
 
     async recordMovement(data: {
         cedisId: number;
@@ -14,7 +18,7 @@ export class InventoryService {
         unitPrice?: number;
         userId?: number;
         notes?: string;
-    }) {
+    }, files?: Express.Multer.File[]) {
         // Determine sign based on type
         const isIncreasing = ([
             InventoryStartType.PURCHASE,
@@ -38,6 +42,22 @@ export class InventoryService {
                     notes: data.notes,
                 },
             });
+
+            // 1.5 Upload evidence if provided
+            if (files && files.length > 0) {
+                const uploadPromises = files.map(file => this.storageService.uploadFile(file, 'inventory_evidences'));
+                const uploadResults = await Promise.all(uploadPromises);
+
+                const validUrls = uploadResults.filter(Boolean);
+                if (validUrls.length > 0) {
+                    await tx.inventoryMovementEvidence.createMany({
+                        data: validUrls.map(url => ({
+                            movementId: movement.id,
+                            url: url,
+                        })),
+                    });
+                }
+            }
 
             // 2. Update the local stock at that CEDIS
             const stock = await tx.inventoryStock.upsert({
@@ -65,25 +85,146 @@ export class InventoryService {
         });
     }
 
-    async getMovements(cedisId?: number, productId?: number) {
+    async adjustMovement(movementId: number, data: {
+        newQuantity: number;
+        newUnitPrice?: number;
+        reason: string;
+        userId: number;
+    }, allowedCedis?: number[]) {
+        if (data.newQuantity < 0) {
+            throw new BadRequestException('Quantity cannot be negative');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            const movement = await tx.inventoryMovement.findUnique({
+                where: { id: movementId },
+            });
+
+            if (!movement) {
+                throw new BadRequestException('Movement not found');
+            }
+
+            if (allowedCedis && allowedCedis.length > 0 && !allowedCedis.map(Number).includes(movement.cedisId)) {
+                throw new ForbiddenException('No tienes acceso a este CEDIS');
+            }
+
+            const oldQuantity = movement.quantity;
+            const oldUnitPrice = movement.unitPrice ? Number(movement.unitPrice) : null;
+            const newUnitPrice = data.newUnitPrice !== undefined ? data.newUnitPrice : oldUnitPrice;
+
+            const isIncreasing = ([
+                InventoryStartType.PURCHASE,
+                InventoryStartType.TRANSFER_IN,
+                InventoryStartType.ADJUSTMENT,
+            ] as InventoryStartType[]).includes(movement.type);
+
+            const sign = isIncreasing ? 1 : -1;
+            const deltaQuantity = (data.newQuantity - oldQuantity) * sign;
+
+            const adjustment = await tx.inventoryMovementAdjustment.create({
+                data: {
+                    inventoryMovementId: movementId,
+                    previousQuantity: oldQuantity,
+                    newQuantity: data.newQuantity,
+                    previousUnitPrice: oldUnitPrice,
+                    newUnitPrice: newUnitPrice,
+                    reason: data.reason,
+                    userId: data.userId,
+                },
+            });
+
+            await tx.inventoryMovement.update({
+                where: { id: movementId },
+                data: {
+                    quantity: data.newQuantity,
+                    unitPrice: newUnitPrice,
+                    totalCost: newUnitPrice ? newUnitPrice * data.newQuantity : null,
+                },
+            });
+
+            const stock = await tx.inventoryStock.upsert({
+                where: {
+                    cedisId_productId: {
+                        cedisId: movement.cedisId,
+                        productId: movement.productId,
+                    },
+                },
+                update: {
+                    quantity: { increment: deltaQuantity },
+                },
+                create: {
+                    cedisId: movement.cedisId,
+                    productId: movement.productId,
+                    quantity: deltaQuantity < 0 ? 0 : deltaQuantity,
+                },
+            });
+
+            if (stock.quantity < 0) {
+                throw new BadRequestException('Insufficient stock for this adjustment');
+            }
+
+            return { adjustment, stock };
+        });
+    }
+
+    async getMovements(cedisId?: number, productId?: number, allowedCedis?: number[]) {
+        let whereCedis: any = undefined;
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (cedisId) {
+                if (allowedCedis.map(Number).includes(Number(cedisId))) {
+                    whereCedis = Number(cedisId);
+                } else {
+                    return [];
+                }
+            } else {
+                whereCedis = { in: allowedCedis.map(Number) };
+            }
+        } else if (cedisId) {
+            whereCedis = Number(cedisId);
+        }
+
         return this.prisma.inventoryMovement.findMany({
             where: {
-                cedisId: cedisId ? +cedisId : undefined,
+                cedisId: whereCedis,
                 productId: productId ? +productId : undefined,
             },
             include: {
                 product: true,
                 cedis: true,
                 user: true,
+                evidence: true,
+                adjustments: {
+                    include: {
+                        user: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                },
             },
             orderBy: { date: 'desc' },
         });
     }
 
-    async getStock(cedisId?: number) {
+    async getStock(cedisId?: number, allowedCedis?: number[]) {
+        let whereCedis: any = undefined;
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (cedisId) {
+                if (allowedCedis.map(Number).includes(Number(cedisId))) {
+                    whereCedis = Number(cedisId);
+                } else {
+                    return [];
+                }
+            } else {
+                whereCedis = { in: allowedCedis.map(Number) };
+            }
+        } else if (cedisId) {
+            whereCedis = Number(cedisId);
+        }
+
         return this.prisma.inventoryStock.findMany({
             where: {
-                cedisId: cedisId ? +cedisId : undefined,
+                cedisId: whereCedis,
             },
             include: {
                 product: true,

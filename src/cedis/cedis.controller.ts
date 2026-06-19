@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { CedisService } from './cedis.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -10,24 +10,24 @@ export class CedisController {
     constructor(private readonly cedisService: CedisService) { }
 
     @Get()
-    findAll() {
-        return this.cedisService.findAll();
+    findAll(@Request() req) {
+        return this.cedisService.findAll(req.user?.allowedCedis);
     }
 
     @Get(':id')
-    findOne(@Param('id', ParseIntPipe) id: number) {
-        return this.cedisService.findOne(id);
+    findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
+        return this.cedisService.findOne(id, req.user?.allowedCedis);
     }
 
     @Post()
     @Roles('ADMIN')
-    create(@Body() data: { name: string; location?: string }) {
+    create(@Body() data: { name: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
         return this.cedisService.create(data);
     }
 
     @Put(':id')
     @Roles('ADMIN')
-    update(@Param('id', ParseIntPipe) id: number, @Body() data: { name?: string; location?: string }) {
+    update(@Param('id', ParseIntPipe) id: number, @Body() data: { name?: string; client?: string; location?: string; latitude?: number; longitude?: number }) {
         return this.cedisService.update(id, data);
     }
 
