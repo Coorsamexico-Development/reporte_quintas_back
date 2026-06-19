@@ -41,4 +41,5 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Scripts de inicio (Sincroniza el esquema ignorando el historial y luego arranca)
-CMD ["sh", "-c", "npx prisma db push && node dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]
+
