@@ -33,12 +33,11 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
+# Crear directorio uploads para servir archivos estáticos
+RUN mkdir -p /app/uploads
+
 # Variables de entorno por defecto (se sobreescriben en Cloud Run)
 ENV NODE_ENV=production
-ENV PORT=8080
-
-# Exponer el puerto
-EXPOSE 8080
 
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]
 
