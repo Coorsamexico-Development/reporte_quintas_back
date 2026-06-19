@@ -39,5 +39,5 @@ RUN mkdir -p /app/uploads
 # Variables de entorno por defecto (se sobreescriben en Cloud Run)
 ENV NODE_ENV=production
 
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]
+CMD ["sh", "-c", "echo '>>> Starting prisma db push...' && npx prisma db push --accept-data-loss 2>&1 && echo '>>> Prisma push OK' || echo '>>> WARNING: Prisma push failed, starting server anyway'; echo '>>> Starting NestJS server...'; node dist/src/main.js"]
 
