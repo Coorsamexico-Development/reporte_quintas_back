@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, UseGuards, Request, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { VehiclesService } from './vehicles.service';
 import { VehicleStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -49,13 +49,20 @@ export class VehiclesController {
             status: VehicleStatus;
             currentCedisId?: number;
         },
+        @Request() req
     ) {
+        const allowed = req.user?.allowedCedis;
+        if (allowed && allowed.length > 0 && data.currentCedisId) {
+            if (!allowed.map(Number).includes(Number(data.currentCedisId))) {
+                throw new ForbiddenException('No tienes acceso al CEDIS de destino');
+            }
+        }
         return this.vehiclesService.create(data);
     }
 
     @Put(':id')
     @RequirePermissions('vehicles:update')
-    update(
+    async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() data: { 
             plate?: string; 
@@ -67,17 +74,32 @@ export class VehiclesController {
             currentCedisId?: number;
             brandId?: number;
         },
+        @Request() req
     ) {
+        const allowed = req.user?.allowedCedis;
+        if (allowed && allowed.length > 0) {
+            await this.vehiclesService.findOne(id, allowed);
+            if (data.currentCedisId && !allowed.map(Number).includes(Number(data.currentCedisId))) {
+                throw new ForbiddenException('No tienes acceso al CEDIS de destino');
+            }
+        }
         return this.vehiclesService.update(id, data);
     }
 
     @Post(':id/move')
     @RequirePermissions('vehicles:update')
-    moveVehicle(
+    async moveVehicle(
         @Param('id', ParseIntPipe) id: number,
         @Body() data: { toCedisId: number; reason?: string },
         @Request() req
     ) {
+        const allowed = req.user?.allowedCedis;
+        if (allowed && allowed.length > 0) {
+            await this.vehiclesService.findOne(id, allowed);
+            if (!allowed.map(Number).includes(Number(data.toCedisId))) {
+                throw new ForbiddenException('No tienes acceso al CEDIS de destino');
+            }
+        }
         return this.vehiclesService.moveVehicle(id, data.toCedisId, req.user.userId, data.reason);
     }
 
@@ -89,7 +111,11 @@ export class VehiclesController {
 
     @Delete(':id')
     @RequirePermissions('vehicles:delete')
-    remove(@Param('id', ParseIntPipe) id: number) {
+    async remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
+        const allowed = req.user?.allowedCedis;
+        if (allowed && allowed.length > 0) {
+            await this.vehiclesService.findOne(id, allowed);
+        }
         return this.vehiclesService.remove(id);
     }
 }

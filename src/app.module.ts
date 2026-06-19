@@ -15,6 +15,8 @@ import { CatalogsModule } from './catalogs/catalogs.module';
 import { FaultsModule } from './faults/faults.module';
 import { StorageModule } from './storage/storage.module';
 import { RolesModule } from './roles/roles.module';
+import { ShiftsModule } from './shifts/shifts.module';
+import { FormsModule } from './forms/forms.module';
 
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -23,6 +25,8 @@ import { join } from 'path';
   imports: [
     PrismaModule, 
     AuthModule, 
+    ShiftsModule,
+    FormsModule,
     CedisModule, 
     VehiclesModule, 
     MaintenanceModule, 

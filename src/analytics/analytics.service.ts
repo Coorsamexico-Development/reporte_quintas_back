@@ -309,4 +309,95 @@ export class AnalyticsService {
             topFaultyUnits
         };
     }
+
+    async getOperationalTrends() {
+        const [assignments, cedisList] = await Promise.all([
+            this.prisma.vehicleShiftAssignment.findMany({
+                include: {
+                    shift: {
+                        select: {
+                            id: true,
+                            name: true,
+                            cedisId: true,
+                            cedis: {
+                                select: {
+                                    name: true
+                                }
+                            }
+                        }
+                    }
+                },
+                orderBy: [
+                    { date: 'asc' }
+                ]
+            }),
+            this.prisma.cedis.findMany({
+                include: {
+                    shifts: {
+                        where: { isActive: true }
+                    }
+                }
+            })
+        ]);
+
+        // Map CEDIS for quick lookup
+        const cedisMap = new Map<number, any>();
+        for (const c of cedisList) {
+            cedisMap.set(c.id, c);
+        }
+
+        // Group by date, CEDIS, and shift
+        const trendsMap = new Map<string, { date: string, shiftName: string, cedisName: string, cedisId: number, operational: number, available: number, backup: number, commitment: number }>();
+
+        for (const a of assignments) {
+            const dateStr = a.date.toISOString().split('T')[0];
+            const shiftName = a.shift?.name || 'Turno';
+            const cedisName = a.shift?.cedis?.name || 'CEDIS';
+            const cedisId = a.shift?.cedisId || 0;
+            const shiftId = a.shift?.id || 0;
+            const key = `${dateStr}_${cedisId}_${shiftName}`;
+
+            if (!trendsMap.has(key)) {
+                // Calculate commitment for this date, CEDIS, and shift
+                let commitment = 0;
+                const cedisObj = cedisMap.get(cedisId);
+                if (cedisObj) {
+                    if (cedisObj.commitmentType === 'SHIFT') {
+                        const shiftObj = cedisObj.shifts.find((s: any) => s.id === shiftId);
+                        if (shiftObj) {
+                            const validUntilObj = shiftObj.validUntil ? new Date(shiftObj.validUntil) : null;
+                            const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
+                            commitment = isExpired ? (shiftObj.nextCommittedUnits ?? shiftObj.committedUnits) : shiftObj.committedUnits;
+                        }
+                    } else {
+                        const validUntilObj = cedisObj.validUntil ? new Date(cedisObj.validUntil) : null;
+                        const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
+                        commitment = isExpired ? (cedisObj.nextCommittedUnits ?? cedisObj.committedUnits) : cedisObj.committedUnits;
+                    }
+                }
+
+                trendsMap.set(key, {
+                    date: dateStr,
+                    shiftName,
+                    cedisName,
+                    cedisId,
+                    operational: 0,
+                    available: 0,
+                    backup: 0,
+                    commitment
+                });
+            }
+
+            const entry = trendsMap.get(key)!;
+            if (a.status === 'OPERATIONAL') {
+                entry.operational++;
+            } else if (a.status === 'AVAILABLE') {
+                entry.available++;
+            } else if (a.status === 'BACKUP') {
+                entry.backup++;
+            }
+        }
+
+        return Array.from(trendsMap.values());
+    }
 }

@@ -22,6 +22,7 @@ model User {
   maintenanceLogs              Maintenance[]
   vehicleMovements             VehicleMovement[]
   inventoryMovementAdjustments InventoryMovementAdjustment[]
+  formResponses                VehicleShiftFormResponse[]
 }
 
 model Cedis {
@@ -38,6 +39,15 @@ model Cedis {
   vehicleDepartures  VehicleMovement[]   @relation("FromCedis")
   vehicleArrivals    VehicleMovement[]   @relation("ToCedis")
   allowedUsers       User[]              @relation("UserAllowedCedis")
+  shifts             Shift[]
+  form               CedisForm?
+
+  // Commitment Configuration
+  commitmentType     String              @default("GLOBAL") // "GLOBAL" o "SHIFT"
+  committedUnits     Int                 @default(0)
+  isIndefinite       Boolean             @default(true)
+  validUntil         DateTime?
+  nextCommittedUnits Int?
 }
 
 model Vehicle {
@@ -67,6 +77,8 @@ model Vehicle {
   transmissionRel       TransmissionType?      @relation(fields: [transmissionId], references: [id])
   documents             VehicleDocument[]
   movementHistory       VehicleMovement[]
+  shiftAssignments      VehicleShiftAssignment[]
+  formResponses         VehicleShiftFormResponse[]
 
   @@index([brandId], map: "Vehicle_brandId_fkey")
   @@index([currentCedisId], map: "Vehicle_currentCedisId_fkey")
@@ -481,4 +493,124 @@ enum MaintenanceStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+model Shift {
+  id                      Int                      @id @default(autoincrement())
+  name                    String                   // Ej. "Matutino", "Vespertino", "Nocturno"
+  startTime               String?                  // Ej. "06:00"
+  endTime                 String?                  // Ej. "14:00"
+  cedisId                 Int
+  cedis                   Cedis                    @relation(fields: [cedisId], references: [id], onDelete: Cascade)
+  isActive                Boolean                  @default(true)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  vehicleShiftAssignments VehicleShiftAssignment[]
+  formResponses           VehicleShiftFormResponse[]
+
+  // Commitment Configuration
+  committedUnits     Int                      @default(0)
+  isIndefinite       Boolean                  @default(true)
+  validUntil         DateTime?
+  nextCommittedUnits Int?
+
+  @@index([cedisId])
+}
+
+model VehicleShiftAssignment {
+  id         Int                @id @default(autoincrement())
+  date       DateTime           // Fecha del turno (hora normalizada a 00:00:00)
+  shiftId    Int
+  shift      Shift              @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  vehicleId  Int
+  vehicle    Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  status     ShiftVehicleStatus // AVAILABLE, BACKUP, OPERATIONAL
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([date, shiftId, vehicleId])
+  @@index([shiftId])
+  @@index([vehicleId])
+}
+
+enum ShiftVehicleStatus {
+  AVAILABLE
+  BACKUP
+  OPERATIONAL
+}
+
+model FieldType {
+  id        Int              @id @default(autoincrement())
+  name      String           @unique // Ej. "TEXT", "LONGTEXT", "DATE", "IMAGE", "SIGNATURE"
+  label     String           // Ej. "Texto Corto", "Firma", "Imagen"
+  isActive  Boolean          @default(true)
+  fields    CedisFormField[]
+}
+
+model CedisForm {
+  id        Int              @id @default(autoincrement())
+  title     String           @default("Inspección de Unidad")
+  cedisId   Int              @unique
+  cedis     Cedis            @relation(fields: [cedisId], references: [id], onDelete: Cascade)
+  fields    CedisFormField[]
+  responses VehicleShiftFormResponse[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model CedisFormField {
+  id          Int               @id @default(autoincrement())
+  formId      Int
+  form        CedisForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  label       String            // Pregunta / Campo
+  section     String?           // E.g., "Sistema de compresión", "Sistema eléctrico", etc.
+  options     String?           @db.Text
+  fieldTypeId Int
+  fieldType   FieldType         @relation(fields: [fieldTypeId], references: [id])
+  isRequired  Boolean           @default(false)
+  order       Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  responses   FormFieldResponse[]
+
+  @@index([formId])
+  @@index([fieldTypeId])
+}
+
+model VehicleShiftFormResponse {
+  id         Int                 @id @default(autoincrement())
+  formId     Int
+  form       CedisForm           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  date       DateTime            // Fecha del registro
+  shiftId    Int
+  shift      Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  vehicleId  Int
+  vehicle    Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userId     Int
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pdfUrl     String?             @db.Text
+  answers    FormFieldResponse[]
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([date, shiftId, vehicleId])
+  @@index([formId])
+  @@index([shiftId])
+  @@index([vehicleId])
+  @@index([userId])
+}
+
+model FormFieldResponse {
+  id         Int                      @id @default(autoincrement())
+  responseId Int
+  response   VehicleShiftFormResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  fieldId    Int
+  field      CedisFormField           @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  value      String                   @db.Text // Guardado en texto (URLs, firmas serializadas en base64, etc.)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  @@unique([responseId, fieldId])
+  @@index([responseId])
+  @@index([fieldId])
 }

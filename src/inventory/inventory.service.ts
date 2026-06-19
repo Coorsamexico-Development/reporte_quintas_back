@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryStartType } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
@@ -90,7 +90,7 @@ export class InventoryService {
         newUnitPrice?: number;
         reason: string;
         userId: number;
-    }) {
+    }, allowedCedis?: number[]) {
         if (data.newQuantity < 0) {
             throw new BadRequestException('Quantity cannot be negative');
         }
@@ -102,6 +102,10 @@ export class InventoryService {
 
             if (!movement) {
                 throw new BadRequestException('Movement not found');
+            }
+
+            if (allowedCedis && allowedCedis.length > 0 && !allowedCedis.map(Number).includes(movement.cedisId)) {
+                throw new ForbiddenException('No tienes acceso a este CEDIS');
             }
 
             const oldQuantity = movement.quantity;
@@ -163,10 +167,25 @@ export class InventoryService {
         });
     }
 
-    async getMovements(cedisId?: number, productId?: number) {
+    async getMovements(cedisId?: number, productId?: number, allowedCedis?: number[]) {
+        let whereCedis: any = undefined;
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (cedisId) {
+                if (allowedCedis.map(Number).includes(Number(cedisId))) {
+                    whereCedis = Number(cedisId);
+                } else {
+                    return [];
+                }
+            } else {
+                whereCedis = { in: allowedCedis.map(Number) };
+            }
+        } else if (cedisId) {
+            whereCedis = Number(cedisId);
+        }
+
         return this.prisma.inventoryMovement.findMany({
             where: {
-                cedisId: cedisId ? +cedisId : undefined,
+                cedisId: whereCedis,
                 productId: productId ? +productId : undefined,
             },
             include: {
@@ -187,10 +206,25 @@ export class InventoryService {
         });
     }
 
-    async getStock(cedisId?: number) {
+    async getStock(cedisId?: number, allowedCedis?: number[]) {
+        let whereCedis: any = undefined;
+        if (allowedCedis && allowedCedis.length > 0) {
+            if (cedisId) {
+                if (allowedCedis.map(Number).includes(Number(cedisId))) {
+                    whereCedis = Number(cedisId);
+                } else {
+                    return [];
+                }
+            } else {
+                whereCedis = { in: allowedCedis.map(Number) };
+            }
+        } else if (cedisId) {
+            whereCedis = Number(cedisId);
+        }
+
         return this.prisma.inventoryStock.findMany({
             where: {
-                cedisId: cedisId ? +cedisId : undefined,
+                cedisId: whereCedis,
             },
             include: {
                 product: true,

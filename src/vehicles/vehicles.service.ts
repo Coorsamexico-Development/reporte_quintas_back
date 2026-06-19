@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { VehicleStatus } from '@prisma/client';
@@ -119,19 +119,27 @@ export class VehiclesService {
         yearModel?: number;
         vin?: string;
     }) {
+        // Sanear cadenas vacías a null para campos únicos/opcionales
+        const createData: any = { ...data };
+        if (createData.vin === '') createData.vin = null;
+        if (createData.engine === '') createData.engine = null;
+
         try {
             return await this.prisma.vehicle.create({
-                data,
+                data: createData,
             });
         } catch (error) {
             if (error.code === 'P2002') {
                 const target = error.meta?.target || '';
-                if (target.includes('plate')) throw new Error('Ya existe un vehículo con esa placa');
-                if (target.includes('truckNumber')) throw new Error('Ya existe un vehículo con ese número económico');
-                if (target.includes('vin')) throw new Error('Ya existe un vehículo con ese número VIN');
-                throw new Error('Ya existe un registro con esos datos únicos');
+                if (target.includes('plate')) throw new BadRequestException('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new BadRequestException('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new BadRequestException('Ya existe un vehículo con ese número VIN');
+                throw new BadRequestException('Ya existe un registro con esos datos únicos');
             }
-            throw error;
+            if (error.code === 'P2003') {
+                throw new BadRequestException('Error de llave foránea: Uno de los IDs de referencia (CEDIS, marca, transmisión o combustible) no existe');
+            }
+            throw new BadRequestException(error.message || 'Error interno al crear el vehículo');
         }
     }
 
@@ -145,20 +153,28 @@ export class VehiclesService {
         currentCedisId?: number;
         brandId?: number;
     }) {
+        // Sanear cadenas vacías a null
+        const updateData: any = { ...data };
+        if (updateData.vin === '') updateData.vin = null;
+        if (updateData.engine === '') updateData.engine = null;
+
         try {
             return await this.prisma.vehicle.update({
                 where: { id },
-                data,
+                data: updateData,
             });
         } catch (error) {
             if (error.code === 'P2002') {
                 const target = error.meta?.target || '';
-                if (target.includes('plate')) throw new Error('Ya existe un vehículo con esa placa');
-                if (target.includes('truckNumber')) throw new Error('Ya existe un vehículo con ese número económico');
-                if (target.includes('vin')) throw new Error('Ya existe un vehículo con ese número VIN');
-                throw new Error('Ya existe un registro con esos datos únicos');
+                if (target.includes('plate')) throw new BadRequestException('Ya existe un vehículo con esa placa');
+                if (target.includes('truckNumber')) throw new BadRequestException('Ya existe un vehículo con ese número económico');
+                if (target.includes('vin')) throw new BadRequestException('Ya existe un vehículo con ese número VIN');
+                throw new BadRequestException('Ya existe un registro con esos datos únicos');
             }
-            throw error;
+            if (error.code === 'P2003') {
+                throw new BadRequestException('Error de llave foránea: Uno de los IDs de referencia (CEDIS, marca, transmisión o combustible) no existe');
+            }
+            throw new BadRequestException(error.message || 'Error interno al actualizar el vehículo');
         }
     }
 

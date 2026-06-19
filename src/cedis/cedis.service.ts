@@ -14,6 +14,9 @@ export class CedisService {
                 _count: {
                     select: { currentVehicles: true },
                 },
+                shifts: {
+                    where: { isActive: true }
+                }
             },
         });
     }
@@ -39,10 +42,14 @@ export class CedisService {
         });
     }
 
-    async update(id: number, data: { name?: string; location?: string; latitude?: number; longitude?: number }) {
+    async update(id: number, data: any) {
+        const updateData = { ...data };
+        if (updateData.validUntil !== undefined) {
+            updateData.validUntil = updateData.validUntil ? new Date(updateData.validUntil) : null;
+        }
         return this.prisma.cedis.update({
             where: { id },
-            data,
+            data: updateData,
         });
     }
 

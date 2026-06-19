@@ -26,4 +26,10 @@ export class AnalyticsController {
     async getGlobalSummary() {
         return await this.analyticsService.getGlobalSummary();
     }
+
+    @Get('operational-trends')
+    @Roles('ADMIN', 'OPERATOR')
+    async getOperationalTrends() {
+        return await this.analyticsService.getOperationalTrends();
+    }
 }

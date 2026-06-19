@@ -138,6 +138,29 @@ async function main() {
   });
   console.log('- Roles ADMIN, OPERATOR y CLIENTE creados/verificados.');
 
+  // 6. Tipos de Campo para Formulario Dinámico
+  console.log('Creando tipos de campo por defecto...');
+  const fieldTypes = [
+    { name: 'TEXT', label: 'Texto Corto' },
+    { name: 'LONGTEXT', label: 'Texto Largo' },
+    { name: 'DATE', label: 'Fecha' },
+    { name: 'IMAGE', label: 'Imagen' },
+    { name: 'SIGNATURE', label: 'Firma Digital' },
+    { name: 'CHECK', label: 'Casilla de Verificación (Check)' },
+    { name: 'SELECT', label: 'Selección (Dropdown)' },
+    { name: 'NUMBER', label: 'Valor Numérico' },
+    { name: 'DOCUMENT', label: 'Documento / Archivo' }
+  ];
+
+  for (const ft of fieldTypes) {
+    await prisma.fieldType.upsert({
+      where: { name: ft.name },
+      update: { label: ft.label },
+      create: { name: ft.name, label: ft.label },
+    });
+  }
+  console.log(`- ${fieldTypes.length} tipos de campo creados/verificados.`);
+
   console.log('Seeding completado con éxito.');
 }
 

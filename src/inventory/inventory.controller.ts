@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles, Req, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles, Req, Param, ForbiddenException } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { InventoryService } from './inventory.service';
 import { InventoryStartType } from '@prisma/client';
@@ -17,8 +17,15 @@ export class InventoryController {
     @UseInterceptors(FilesInterceptor('evidence'))
     recordMovement(
         @UploadedFiles() files: Express.Multer.File[],
-        @Body() body: any
+        @Body() body: any,
+        @Req() req: any
     ) {
+        const cedisId = Number(body.cedisId);
+        const allowed = req.user?.allowedCedis;
+        if (allowed && allowed.length > 0 && !allowed.map(Number).includes(cedisId)) {
+            throw new ForbiddenException('No tienes acceso a este CEDIS');
+        }
+
         const data = {
             cedisId: Number(body.cedisId),
             productId: Number(body.productId),
@@ -43,19 +50,20 @@ export class InventoryController {
             newUnitPrice: body.newUnitPrice !== undefined ? Number(body.newUnitPrice) : undefined,
             reason: body.reason,
             userId,
-        });
+        }, req.user?.allowedCedis);
     }
 
     @Get('movements')
     getMovements(
+        @Req() req: any,
         @Query('cedisId') cedisId?: number,
         @Query('productId') productId?: number,
     ) {
-        return this.inventoryService.getMovements(cedisId, productId);
+        return this.inventoryService.getMovements(cedisId, productId, req.user?.allowedCedis);
     }
 
     @Get('stock')
-    getStock(@Query('cedisId') cedisId?: number) {
-        return this.inventoryService.getStock(cedisId);
+    getStock(@Req() req: any, @Query('cedisId') cedisId?: number) {
+        return this.inventoryService.getStock(cedisId, req.user?.allowedCedis);
     }
 }
