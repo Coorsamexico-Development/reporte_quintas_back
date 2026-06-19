@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { createConnection } from 'mysql2/promise';
 
 // Capturar errores no manejados a nivel global
 process.on('unhandledRejection', (reason, promise) => {
@@ -15,39 +16,86 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+async function testDatabaseConnection() {
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️ DATABASE_URL is not set in environment.');
+    return;
+  }
+
+  console.log('🏁 Testing database connection options...');
+  const urlStr = process.env.DATABASE_URL;
+  try {
+    // Usar la API URL de Node reemplazando mysql:// por http:// para poder parsearla
+    const parsedUrl = new URL(urlStr.replace('mysql://', 'http://'));
+    const user = parsedUrl.username;
+    const password = decodeURIComponent(parsedUrl.password);
+    const database = parsedUrl.pathname.replace('/', '');
+    const socketPath = parsedUrl.searchParams.get('socket');
+
+    console.log(`🔍 Parsed database configuration - User: ${user}, Database: ${database}`);
+
+    if (socketPath) {
+      // Probar el path original y el alternativo (con/sin /mysql.sock)
+      const candidate1 = socketPath;
+      const candidate2 = socketPath.endsWith('/mysql.sock') 
+        ? socketPath.replace('/mysql.sock', '') 
+        : `${socketPath}/mysql.sock`;
+
+      const candidates = [candidate1, candidate2];
+
+      for (const candidate of candidates) {
+        console.log(`🔌 Testing Unix socket path: "${candidate}" ...`);
+        try {
+          const connection = await createConnection({
+            user,
+            password,
+            database,
+            socketPath: candidate,
+            connectTimeout: 5000 // 5 segundos
+          });
+          console.log(`✅ DATABASE CONNECTION SUCCESSFUL via socket: "${candidate}"`);
+          await connection.end();
+
+          // Reconstruir y actualizar la DATABASE_URL con el socket que sí funcionó
+          const newUrl = `mysql://${user}:${encodeURIComponent(password)}@localhost/${database}?socket=${candidate}`;
+          process.env.DATABASE_URL = newUrl;
+          console.log('➡️ process.env.DATABASE_URL updated successfully.');
+          return;
+        } catch (err: any) {
+          console.log(`❌ Connection failed for "${candidate}": ${err.message} (Code: ${err.code || 'UNKNOWN'})`);
+        }
+      }
+    } else {
+      // Conexión TCP estándar
+      const host = parsedUrl.hostname || 'localhost';
+      const port = parsedUrl.port || '3306';
+      console.log(`🔌 Testing TCP connection to ${host}:${port}...`);
+      try {
+        const connection = await createConnection({
+          user,
+          password,
+          database,
+          host,
+          port: parseInt(port),
+          connectTimeout: 5000
+        });
+        console.log(`✅ DATABASE CONNECTION SUCCESSFUL via TCP to ${host}:${port}`);
+        await connection.end();
+      } catch (err: any) {
+        console.log(`❌ TCP connection failed: ${err.message} (Code: ${err.code || 'UNKNOWN'})`);
+      }
+    }
+  } catch (err: any) {
+    console.error('❌ Error parsing DATABASE_URL:', err.message);
+  }
+}
+
 async function bootstrap() {
   try {
     console.log('🏁 Starting application bootstrap...');
     
-    // Inspección y ajuste dinámico de DATABASE_URL para Cloud Run (socket Unix)
-    if (process.env.DATABASE_URL) {
-      console.log('Inspect DATABASE_URL:', process.env.DATABASE_URL.replace(/:[^:@/]+@/, ':****@')); // Ocultar contraseña en logs
-      
-      const dbUrl = process.env.DATABASE_URL;
-      const socketMatch = dbUrl.match(/\?socket=([^&]+)/);
-      if (socketMatch) {
-        const originalSocketPath = socketMatch[1];
-        console.log(`Detected socket path in DATABASE_URL: ${originalSocketPath}`);
-        
-        if (originalSocketPath.endsWith('/mysql.sock')) {
-          const alternativePath = originalSocketPath.replace('/mysql.sock', '');
-          
-          console.log(`Checking if socket files exist...`);
-          console.log(`- Original path (${originalSocketPath}): exists? ${existsSync(originalSocketPath)}`);
-          console.log(`- Alternative path (${alternativePath}): exists? ${existsSync(alternativePath)}`);
-          
-          // Si el archivo mysql.sock no existe, pero el path base sí existe,
-          // significa que Cloud Run Gen2 montó el socket directamente en el path base.
-          if (!existsSync(originalSocketPath) && existsSync(alternativePath)) {
-            console.log(`⚠️ Correcting socket path to Gen2 format: ${alternativePath}`);
-            process.env.DATABASE_URL = dbUrl.replace(originalSocketPath, alternativePath);
-            console.log('New DATABASE_URL set:', process.env.DATABASE_URL.replace(/:[^:@/]+@/, ':****@'));
-          }
-        }
-      }
-    } else {
-      console.log('⚠️ DATABASE_URL is not defined in process.env');
-    }
+    // Probar y corregir la conexión a la base de datos
+    await testDatabaseConnection();
 
     // Listar contenido de /cloudsql para mayor visibilidad
     try {
@@ -103,4 +151,5 @@ async function bootstrap() {
   }
 }
 bootstrap();
+
 
