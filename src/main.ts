@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { createConnection } from 'mysql2/promise';
+import { execSync } from 'child_process';
 
 // Capturar errores no manejados a nivel global
 process.on('unhandledRejection', (reason, promise) => {
@@ -97,6 +98,19 @@ async function bootstrap() {
     // Probar y corregir la conexión a la base de datos
     await testDatabaseConnection();
 
+    // Sincronizar el esquema de la base de datos con Prisma antes de iniciar NestJS
+    console.log('🔄 Sincronizando esquema de base de datos con Prisma (db push)...');
+    try {
+      execSync('npx prisma db push --accept-data-loss', {
+        env: process.env,
+        stdio: 'inherit' // Redirige salida de prisma directamente a los logs del contenedor
+      });
+      console.log('✅ Prisma db push completado con éxito.');
+    } catch (dbPushError: any) {
+      console.error('❌ Error durante npx prisma db push:', dbPushError.message);
+      // No hacemos crash aquí, dejamos que continúe para ver si puede levantar
+    }
+
     // Listar contenido de /cloudsql para mayor visibilidad
     try {
       if (existsSync('/cloudsql')) {
@@ -151,5 +165,6 @@ async function bootstrap() {
   }
 }
 bootstrap();
+
 
 
