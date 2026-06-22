@@ -241,6 +241,100 @@ async function main() {
       });
     }
     console.log('- Compromisos de GDL para 2026 creados con éxito.');
+
+    // 8. Sembrado seguro del checklist de GDL
+    console.log('Sembrando checklist de GDL...');
+    const gdlForm = await prisma.cedisForm.upsert({
+      where: { cedisId: gdlCedis.id },
+      update: {},
+      create: {
+        cedisId: gdlCedis.id,
+        title: 'Checklist de Inspección Diaria (GDL)'
+      }
+    });
+
+    const fieldTypesList = await prisma.fieldType.findMany();
+    const typeMap = new Map(fieldTypesList.map(t => [t.name, t.id]));
+
+    const checkTypeId = typeMap.get('CHECK')!;
+    const numberTypeId = typeMap.get('NUMBER')!;
+    const selectTypeId = typeMap.get('SELECT')!;
+    const longtextTypeId = typeMap.get('LONGTEXT')!;
+    const signatureTypeId = typeMap.get('SIGNATURE')!;
+
+    const gdlFields = [
+      // Header
+      { label: 'Horómetro', section: 'DATOS GENERALES', fieldTypeId: numberTypeId, docSection: 'HEADER', columnNumber: 3, isRequired: true, options: null },
+      { label: 'Nivel de gasolina', section: 'DATOS GENERALES', fieldTypeId: selectTypeId, docSection: 'HEADER', columnNumber: 3, isRequired: true, options: JSON.stringify(['E (Vacío)', '1/4', '1/2', '3/4', 'F (Lleno)']) },
+      // Col 1
+      { label: 'Presión', section: 'Sistema de compresión', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Fugas', section: 'Sistema de compresión', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Luces (general)', section: 'Sistema eléctrico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Claxon', section: 'Sistema eléctrico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Marcha', section: 'Sistema eléctrico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Switch', section: 'Sistema eléctrico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Batería', section: 'Sistema eléctrico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+      // Col 2
+      { label: 'Alarma de reversa', section: 'Sistema de seguridad', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Espejos', section: 'Sistema de seguridad', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Cinturón', section: 'Sistema de seguridad', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Extintor', section: 'Sistema de seguridad', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Presión', section: 'Llantas', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Desgaste', section: 'Llantas', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      { label: 'Tornillería', section: 'Llantas', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+      // Col 3
+      { label: 'Nivel de aceite', section: 'Motor', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Fugas', section: 'Motor', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Refrigerante', section: 'Motor', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Mangueras', section: 'Sistema hidráulico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Fugas', section: 'Sistema hidráulico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Pistones', section: 'Sistema hidráulico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      { label: 'Nivel de aceite', section: 'Sistema hidráulico', fieldTypeId: checkTypeId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+      // Footer
+      { label: 'Comentarios', section: 'COMENTARIOS', fieldTypeId: longtextTypeId, docSection: 'FOOTER', columnNumber: 1, isRequired: false, options: null },
+      { label: 'Supervisor', section: 'FIRMA', fieldTypeId: signatureTypeId, docSection: 'FOOTER', columnNumber: 1, isRequired: true, options: null },
+      { label: 'Validación', section: 'VALIDACIÓN', fieldTypeId: selectTypeId, docSection: 'FOOTER', columnNumber: 1, isRequired: true, options: JSON.stringify(['OPERATIVA', 'NO OPERATIVA']) }
+    ];
+
+    let orderIndex = 0;
+    for (const f of gdlFields) {
+      const existingField = await prisma.cedisFormField.findFirst({
+        where: {
+          formId: gdlForm.id,
+          label: f.label,
+          section: f.section
+        }
+      });
+
+      if (existingField) {
+        await prisma.cedisFormField.update({
+          where: { id: existingField.id },
+          data: {
+            fieldTypeId: f.fieldTypeId,
+            docSection: f.docSection,
+            columnNumber: f.columnNumber,
+            isRequired: f.isRequired,
+            options: f.options,
+            order: orderIndex++
+          }
+        });
+      } else {
+        await prisma.cedisFormField.create({
+          data: {
+            formId: gdlForm.id,
+            label: f.label,
+            section: f.section,
+            fieldTypeId: f.fieldTypeId,
+            docSection: f.docSection,
+            columnNumber: f.columnNumber,
+            isRequired: f.isRequired,
+            options: f.options,
+            order: orderIndex++
+          }
+        });
+      }
+    }
+    console.log('- Checklist de GDL sembrado/actualizado de forma segura.');
   } else {
     console.warn('⚠️ GDL CEDIS no encontrado durante el sembrado.');
   }
