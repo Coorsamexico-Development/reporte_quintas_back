@@ -162,6 +162,7 @@ async function bootstrap() {
                 name: r.name,
                 description: r.description,
                 permissions: {
+                  dashboard: { read: r.name !== 'CLIENTE' },
                   vehicles: { create: r.name === 'ADMIN', read: true, update: r.name !== 'CLIENTE', delete: r.name === 'ADMIN' },
                   users: { create: r.name === 'ADMIN', read: r.name === 'ADMIN', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
                   catalogs: { create: r.name === 'ADMIN', read: r.name !== 'CLIENTE', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
