@@ -28,7 +28,7 @@ export class AnalyticsController {
     }
 
     @Get('operational-trends')
-    @Roles('ADMIN', 'OPERATOR')
+    @Roles('ADMIN', 'OPERATOR', 'CLIENTE')
     async getOperationalTrends() {
         return await this.analyticsService.getOperationalTrends();
     }
