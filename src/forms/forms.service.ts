@@ -730,6 +730,26 @@ export class FormsService {
     });
   }
 
+  async getInspectionDetail(responseId: number) {
+    return this.prisma.vehicleShiftFormResponse.findUnique({
+      where: { id: Number(responseId) },
+      include: {
+        shift: { select: { name: true } },
+        user: { select: { name: true } },
+        vehicle: { select: { id: true, truckNumber: true, plate: true } },
+        answers: {
+          include: {
+            field: {
+              include: {
+                fieldType: true
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   async getInspectionPdfViewUrl(pdfUrl: string): Promise<string> {
     return this.storageService.getViewUrl(pdfUrl);
   }
@@ -764,5 +784,88 @@ export class FormsService {
     return this.prisma.vehicleShiftFormResponse.delete({
       where: { id: Number(responseId) },
     });
+  }
+
+  async getComplianceMatrix(cedisId: number, dateStr: string) {
+    const parsedDate = new Date(`${dateStr}T00:00:00.000Z`);
+    const year = parsedDate.getUTCFullYear();
+    const month = parsedDate.getUTCMonth();
+
+    const startDate = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+
+    const responses = await this.prisma.vehicleShiftFormResponse.findMany({
+      where: {
+        form: {
+          cedisId: Number(cedisId)
+        },
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      select: {
+        id: true,
+        date: true,
+        vehicleId: true,
+        shiftId: true,
+        vehicle: {
+          select: {
+            id: true,
+            truckNumber: true
+          }
+        }
+      }
+    });
+
+    const assignments = await this.prisma.vehicleShiftAssignment.findMany({
+      where: {
+        shift: {
+          cedisId: Number(cedisId)
+        },
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      select: {
+        vehicleId: true,
+        vehicle: {
+          select: {
+            id: true,
+            truckNumber: true
+          }
+        }
+      }
+    });
+
+    const vehiclesMap = new Map<number, string>();
+    for (const r of responses) {
+      if (r.vehicle) {
+        vehiclesMap.set(r.vehicle.id, r.vehicle.truckNumber);
+      }
+    }
+    for (const a of assignments) {
+      if (a.vehicle) {
+        vehiclesMap.set(a.vehicle.id, a.vehicle.truckNumber);
+      }
+    }
+
+    const vehicles = Array.from(vehiclesMap.entries()).map(([id, truckNumber]) => ({
+      id,
+      truckNumber
+    })).sort((a, b) => a.truckNumber.localeCompare(b.truckNumber, undefined, { numeric: true }));
+
+    const completed = responses.map(r => ({
+      responseId: r.id,
+      vehicleId: r.vehicleId,
+      shiftId: r.shiftId,
+      date: r.date.toISOString().split('T')[0]
+    }));
+
+    return {
+      vehicles,
+      completed
+    };
   }
 }

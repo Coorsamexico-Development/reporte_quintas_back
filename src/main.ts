@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
-import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
 import { createConnection } from 'mysql2/promise';
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
@@ -100,71 +100,87 @@ async function bootstrap() {
     await testDatabaseConnection();
 
     // Sincronizar el esquema de la base de datos con Prisma antes de iniciar NestJS
-    console.log('🔄 Sincronizando esquema de base de datos con Prisma (db push)...');
-    try {
-      execSync('npx prisma db push --accept-data-loss', {
-        env: process.env,
-        stdio: 'inherit'
-      });
-      console.log('✅ Prisma db push completado con éxito.');
-      
-      // Sembrar datos por defecto programáticamente
-      console.log('🌱 Sembrando datos catálogo por defecto en la base de datos...');
-      const prisma = new PrismaClient();
+    let skipDbPush = process.env.SKIP_DB_PUSH === 'true';
+    if (!skipDbPush && existsSync('.env')) {
       try {
-        // 1. Tipos de campo para formularios
-        const fieldTypes = [
-          { name: 'TEXT', label: 'Texto Corto' },
-          { name: 'LONGTEXT', label: 'Texto Largo' },
-          { name: 'DATE', label: 'Fecha' },
-          { name: 'IMAGE', label: 'Imagen' },
-          { name: 'SIGNATURE', label: 'Firma Digital' },
-          { name: 'CHECK', label: 'Casilla de Verificación (Check)' },
-          { name: 'SELECT', label: 'Selección (Dropdown)' },
-          { name: 'NUMBER', label: 'Valor Numérico' },
-          { name: 'DOCUMENT', label: 'Documento / Archivo' }
-        ];
-        for (const ft of fieldTypes) {
-          await prisma.fieldType.upsert({
-            where: { name: ft.name },
-            update: { label: ft.label },
-            create: { name: ft.name, label: ft.label },
-          });
+        const envContent = readFileSync('.env', 'utf8');
+        if (envContent.includes('SKIP_DB_PUSH=true') || envContent.includes('SKIP_DB_PUSH="true"')) {
+          skipDbPush = true;
         }
-        console.log(`  - ${fieldTypes.length} tipos de campo verificados.`);
-
-        // 2. Roles por defecto
-        const roles = [
-          { name: 'ADMIN', description: 'Administrador con acceso completo.' },
-          { name: 'OPERATOR', description: 'Operador con acceso básico.' },
-          { name: 'CLIENTE', description: 'Cliente con acceso de consulta.' }
-        ];
-        for (const r of roles) {
-          await prisma.role.upsert({
-            where: { name: r.name },
-            update: { description: r.description },
-            create: {
-              name: r.name,
-              description: r.description,
-              permissions: {
-                vehicles: { create: r.name === 'ADMIN', read: true, update: r.name !== 'CLIENTE', delete: r.name === 'ADMIN' },
-                users: { create: r.name === 'ADMIN', read: r.name === 'ADMIN', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
-                catalogs: { create: r.name === 'ADMIN', read: r.name !== 'CLIENTE', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
-                customerPanel: { read: r.name !== 'OPERATOR' }
-              }
-            }
-          });
-        }
-        console.log('  - Roles ADMIN, OPERATOR y CLIENTE verificados.');
-        console.log('✅ Sembrado de datos completado con éxito.');
-      } catch (seedErr: any) {
-        console.error('❌ Error durante el sembrado de base de datos:', seedErr.message);
-      } finally {
-        await prisma.$disconnect();
+      } catch (err) {
+        // ignore errors reading env file
       }
-    } catch (dbPushError: any) {
-      console.error('❌ Error durante npx prisma db push:', dbPushError.message);
-      // No hacemos crash aquí, dejamos que continúe para ver si puede levantar
+    }
+
+    if (skipDbPush) {
+      console.log('⏭️ Skipping database push and seeding (SKIP_DB_PUSH is true).');
+    } else {
+      console.log('🔄 Sincronizando esquema de base de datos con Prisma (db push)...');
+      try {
+        execSync('npx prisma db push --accept-data-loss', {
+          env: process.env,
+          stdio: 'inherit'
+        });
+        console.log('✅ Prisma db push completado con éxito.');
+        
+        // Sembrar datos por defecto programáticamente
+        console.log('🌱 Sembrando datos catálogo por defecto en la base de datos... ');
+        const prisma = new PrismaClient();
+        try {
+          // 1. Tipos de campo para formularios
+          const fieldTypes = [
+            { name: 'TEXT', label: 'Texto Corto' },
+            { name: 'LONGTEXT', label: 'Texto Largo' },
+            { name: 'DATE', label: 'Fecha' },
+            { name: 'IMAGE', label: 'Imagen' },
+            { name: 'SIGNATURE', label: 'Firma Digital' },
+            { name: 'CHECK', label: 'Casilla de Verificación (Check)' },
+            { name: 'SELECT', label: 'Selección (Dropdown)' },
+            { name: 'NUMBER', label: 'Valor Numérico' },
+            { name: 'DOCUMENT', label: 'Documento / Archivo' }
+          ];
+          for (const ft of fieldTypes) {
+            await prisma.fieldType.upsert({
+              where: { name: ft.name },
+              update: { label: ft.label },
+              create: { name: ft.name, label: ft.label },
+            });
+          }
+          console.log(`  - ${fieldTypes.length} tipos de campo verificados.`);
+
+          // 2. Roles por defecto
+          const roles = [
+            { name: 'ADMIN', description: 'Administrador con acceso completo.' },
+            { name: 'OPERATOR', description: 'Operador con acceso básico.' },
+            { name: 'CLIENTE', description: 'Cliente con acceso de consulta.' }
+          ];
+          for (const r of roles) {
+            await prisma.role.upsert({
+              where: { name: r.name },
+              update: { description: r.description },
+              create: {
+                name: r.name,
+                description: r.description,
+                permissions: {
+                  vehicles: { create: r.name === 'ADMIN', read: true, update: r.name !== 'CLIENTE', delete: r.name === 'ADMIN' },
+                  users: { create: r.name === 'ADMIN', read: r.name === 'ADMIN', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
+                  catalogs: { create: r.name === 'ADMIN', read: r.name !== 'CLIENTE', update: r.name === 'ADMIN', delete: r.name === 'ADMIN' },
+                  customerPanel: { read: r.name !== 'OPERATOR' }
+                }
+              }
+            });
+          }
+          console.log('  - Roles ADMIN, OPERATOR y CLIENTE verificados.');
+          console.log('✅ Sembrado de datos completado con éxito.');
+        } catch (seedErr: any) {
+          console.error('❌ Error durante el sembrado de base de datos:', seedErr.message);
+        } finally {
+          await prisma.$disconnect();
+        }
+      } catch (dbPushError: any) {
+        console.error('❌ Error durante npx prisma db push:', dbPushError.message);
+        // No hacemos crash aquí, dejamos que continúe para ver si puede levantar
+      }
     }
 
     // Listar contenido de /cloudsql para mayor visibilidad

@@ -89,6 +89,11 @@ export class FormsController {
     }
   }
 
+  @Get('inspections/detail/:responseId')
+  getInspectionDetail(@Param('responseId', ParseIntPipe) responseId: number) {
+    return this.formsService.getInspectionDetail(responseId);
+  }
+
   @Get('inspections/:vehicleId')
   findInspectionsByVehicle(@Param('vehicleId', ParseIntPipe) vehicleId: number) {
     return this.formsService.findInspectionsByVehicle(vehicleId);
@@ -112,5 +117,18 @@ export class FormsController {
     }
 
     return this.formsService.deleteInspection(responseId);
+  }
+
+  @Get('compliance-matrix')
+  getComplianceMatrix(
+    @Query('cedisId', ParseIntPipe) cedisId: number,
+    @Query('date') date: string,
+    @Request() req
+  ) {
+    const allowed = req.user?.allowedCedis;
+    if (allowed && allowed.length > 0 && !allowed.map(Number).includes(cedisId)) {
+      return { vehicles: [], completed: [] };
+    }
+    return this.formsService.getComplianceMatrix(cedisId, date);
   }
 }
