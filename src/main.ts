@@ -172,6 +172,101 @@ async function bootstrap() {
             });
           }
           console.log('  - Roles ADMIN, OPERATOR y CLIENTE verificados.');
+
+          // 3. Marcas de vehículos
+          const brands = ['Kenworth','Freightliner','International','Volvo','Peterbilt','Isuzu','Hino','Mercedes-Benz','Scania','Mack'];
+          for (const name of brands) {
+            await prisma.vehicleBrand.upsert({ where: { name }, update: {}, create: { name } });
+          }
+
+          // 4. Tipos de transmisión
+          const transmissions = ['Manual 10 Velocidades','Manual 18 Velocidades','Automática','Automatizada (Allison)','Automatizada (Eaton)'];
+          for (const name of transmissions) {
+            await prisma.transmissionType.upsert({ where: { name }, update: {}, create: { name } });
+          }
+
+          // 5. Tipos de combustible
+          const fuels = ['Diesel','Gasolina','Gas Natural Vehicular (GNV)','Eléctrico','Híbrido'];
+          for (const name of fuels) {
+            await prisma.fuelType.upsert({ where: { name }, update: {}, create: { name } });
+          }
+
+          // 6. GDL Checklist, Turnos y Periodos de Compromiso
+          const gdlCedis = await prisma.cedis.findFirst({ where: { name: { startsWith: 'GDL' } } });
+          if (gdlCedis) {
+            await prisma.cedis.update({ where: { id: gdlCedis.id }, data: { commitmentType: 'SHIFT' } });
+
+            let matutinoShift = await prisma.shift.findFirst({ where: { name: 'Matutino', cedisId: gdlCedis.id } });
+            if (!matutinoShift) {
+              matutinoShift = await prisma.shift.create({ data: { name: 'Matutino', startTime: '06:00', endTime: '18:00', cedisId: gdlCedis.id } });
+            }
+            let nocturnoShift = await prisma.shift.findFirst({ where: { name: 'Nocturno', cedisId: gdlCedis.id } });
+            if (!nocturnoShift) {
+              nocturnoShift = await prisma.shift.create({ data: { name: 'Nocturno', startTime: '18:00', endTime: '06:00', cedisId: gdlCedis.id } });
+            }
+
+            await prisma.cedisCommitmentPeriod.deleteMany({ where: { cedisId: gdlCedis.id } });
+            const periodsData = [
+              { startDate: '2026-01-01T00:00:00Z', endDate: '2026-03-11T23:59:59Z', committedUnits: 8 },
+              { startDate: '2026-03-12T00:00:00Z', endDate: '2026-05-24T23:59:59Z', committedUnits: 7 },
+              { startDate: '2026-05-25T00:00:00Z', endDate: '2026-05-31T23:59:59Z', committedUnits: 9 }
+            ];
+            for (const p of periodsData) {
+              await prisma.cedisCommitmentPeriod.create({ data: { cedisId: gdlCedis.id, shiftId: matutinoShift.id, startDate: new Date(p.startDate), endDate: new Date(p.endDate), committedUnits: p.committedUnits } });
+              await prisma.cedisCommitmentPeriod.create({ data: { cedisId: gdlCedis.id, shiftId: nocturnoShift.id, startDate: new Date(p.startDate), endDate: new Date(p.endDate), committedUnits: p.committedUnits } });
+            }
+
+            // GDL Checklist Form
+            const gdlForm = await prisma.cedisForm.upsert({ where: { cedisId: gdlCedis.id }, update: {}, create: { cedisId: gdlCedis.id, title: 'Checklist de Inspección Diaria (GDL)' } });
+            const fieldTypesList = await prisma.fieldType.findMany();
+            const typeMap = new Map(fieldTypesList.map((t: any) => [t.name, t.id]));
+            const checkId = typeMap.get('CHECK')!;
+            const numberId = typeMap.get('NUMBER')!;
+            const selectId = typeMap.get('SELECT')!;
+            const longtextId = typeMap.get('LONGTEXT')!;
+            const signatureId = typeMap.get('SIGNATURE')!;
+
+            const gdlFields = [
+              { label: 'Horómetro', section: 'DATOS GENERALES', fieldTypeId: numberId, docSection: 'HEADER', columnNumber: 3, isRequired: true, options: null },
+              { label: 'Nivel de gasolina', section: 'DATOS GENERALES', fieldTypeId: selectId, docSection: 'HEADER', columnNumber: 3, isRequired: true, options: JSON.stringify(['E (Vacío)', '1/4', '1/2', '3/4', 'F (Lleno)']) },
+              { label: 'Presión', section: 'Sistema de compresión', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Fugas', section: 'Sistema de compresión', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Luces (general)', section: 'Sistema eléctrico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Claxon', section: 'Sistema eléctrico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Marcha', section: 'Sistema eléctrico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Switch', section: 'Sistema eléctrico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Batería', section: 'Sistema eléctrico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Alarma de reversa', section: 'Sistema de seguridad', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Espejos', section: 'Sistema de seguridad', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Cinturón', section: 'Sistema de seguridad', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Extintor', section: 'Sistema de seguridad', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Presión', section: 'Llantas', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Desgaste', section: 'Llantas', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Tornillería', section: 'Llantas', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 2, isRequired: false, options: null },
+              { label: 'Nivel de aceite', section: 'Motor', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Fugas', section: 'Motor', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Refrigerante', section: 'Motor', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Mangueras', section: 'Sistema hidráulico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Fugas', section: 'Sistema hidráulico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Pistones', section: 'Sistema hidráulico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Nivel de aceite', section: 'Sistema hidráulico', fieldTypeId: checkId, docSection: 'BODY', columnNumber: 3, isRequired: false, options: null },
+              { label: 'Comentarios', section: 'COMENTARIOS', fieldTypeId: longtextId, docSection: 'FOOTER', columnNumber: 1, isRequired: false, options: null },
+              { label: 'Supervisor', section: 'FIRMA', fieldTypeId: signatureId, docSection: 'FOOTER', columnNumber: 1, isRequired: true, options: null },
+              { label: 'Validación', section: 'VALIDACIÓN', fieldTypeId: selectId, docSection: 'FOOTER', columnNumber: 1, isRequired: true, options: JSON.stringify(['OPERATIVA', 'NO OPERATIVA']) }
+            ];
+
+            let orderIndex = 0;
+            for (const f of gdlFields) {
+              const existingField = await prisma.cedisFormField.findFirst({ where: { formId: gdlForm.id, label: f.label, section: f.section } });
+              if (existingField) {
+                await prisma.cedisFormField.update({ where: { id: existingField.id }, data: { fieldTypeId: f.fieldTypeId, docSection: f.docSection, columnNumber: f.columnNumber, isRequired: f.isRequired, options: f.options, order: orderIndex++ } });
+              } else {
+                await prisma.cedisFormField.create({ data: { formId: gdlForm.id, label: f.label, section: f.section, fieldTypeId: f.fieldTypeId, docSection: f.docSection, columnNumber: f.columnNumber, isRequired: f.isRequired, options: f.options, order: orderIndex++ } });
+              }
+            }
+            console.log('  - GDL checklist, turnos y periodos de compromiso verificados.');
+          }
+
           console.log('✅ Sembrado de datos completado con éxito.');
         } catch (seedErr: any) {
           console.error('❌ Error durante el sembrado de base de datos:', seedErr.message);
