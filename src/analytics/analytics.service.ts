@@ -311,7 +311,7 @@ export class AnalyticsService {
     }
 
     async getOperationalTrends() {
-        const [assignments, cedisList] = await Promise.all([
+        const [assignments, cedisList, commitmentPeriods] = await Promise.all([
             this.prisma.vehicleShiftAssignment.findMany({
                 include: {
                     shift: {
@@ -337,7 +337,8 @@ export class AnalyticsService {
                         where: { isActive: true }
                     }
                 }
-            })
+            }),
+            this.prisma.cedisCommitmentPeriod.findMany()
         ]);
 
         // Map CEDIS for quick lookup
@@ -360,19 +361,37 @@ export class AnalyticsService {
             if (!trendsMap.has(key)) {
                 // Calculate commitment for this date, CEDIS, and shift
                 let commitment = 0;
-                const cedisObj = cedisMap.get(cedisId);
-                if (cedisObj) {
-                    if (cedisObj.commitmentType === 'SHIFT') {
-                        const shiftObj = cedisObj.shifts.find((s: any) => s.id === shiftId);
-                        if (shiftObj) {
-                            const validUntilObj = shiftObj.validUntil ? new Date(shiftObj.validUntil) : null;
+                
+                // Try to find a dynamic commitment period first
+                const dynamicMatch = commitmentPeriods.find(p => 
+                    p.cedisId === cedisId &&
+                    p.shiftId === shiftId &&
+                    a.date.getTime() >= p.startDate.getTime() &&
+                    a.date.getTime() <= p.endDate.getTime()
+                ) || commitmentPeriods.find(p => 
+                    p.cedisId === cedisId &&
+                    p.shiftId === null &&
+                    a.date.getTime() >= p.startDate.getTime() &&
+                    a.date.getTime() <= p.endDate.getTime()
+                );
+
+                if (dynamicMatch) {
+                    commitment = dynamicMatch.committedUnits;
+                } else {
+                    const cedisObj = cedisMap.get(cedisId);
+                    if (cedisObj) {
+                        if (cedisObj.commitmentType === 'SHIFT') {
+                            const shiftObj = cedisObj.shifts.find((s: any) => s.id === shiftId);
+                            if (shiftObj) {
+                                const validUntilObj = shiftObj.validUntil ? new Date(shiftObj.validUntil) : null;
+                                const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
+                                commitment = isExpired ? (shiftObj.nextCommittedUnits ?? shiftObj.committedUnits) : shiftObj.committedUnits;
+                            }
+                        } else {
+                            const validUntilObj = cedisObj.validUntil ? new Date(cedisObj.validUntil) : null;
                             const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
-                            commitment = isExpired ? (shiftObj.nextCommittedUnits ?? shiftObj.committedUnits) : shiftObj.committedUnits;
+                            commitment = isExpired ? (cedisObj.nextCommittedUnits ?? cedisObj.committedUnits) : cedisObj.committedUnits;
                         }
-                    } else {
-                        const validUntilObj = cedisObj.validUntil ? new Date(cedisObj.validUntil) : null;
-                        const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
-                        commitment = isExpired ? (cedisObj.nextCommittedUnits ?? cedisObj.committedUnits) : cedisObj.committedUnits;
                     }
                 }
 

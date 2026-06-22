@@ -41,6 +41,7 @@ model Cedis {
   allowedUsers       User[]              @relation("UserAllowedCedis")
   shifts             Shift[]
   form               CedisForm?
+  commitmentPeriods  CedisCommitmentPeriod[]
 
   // Commitment Configuration
   commitmentType     String              @default("GLOBAL") // "GLOBAL" o "SHIFT"
@@ -507,6 +508,7 @@ model Shift {
   updatedAt               DateTime                 @updatedAt
   vehicleShiftAssignments VehicleShiftAssignment[]
   formResponses           VehicleShiftFormResponse[]
+  commitmentPeriods       CedisCommitmentPeriod[]
 
   // Commitment Configuration
   committedUnits     Int                      @default(0)
@@ -572,6 +574,8 @@ model CedisFormField {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   responses   FormFieldResponse[]
+  docSection  String            @default("BODY") // "HEADER", "BODY", "FOOTER"
+  columnNumber Int              @default(1)      // 1, 2, o 3
 
   @@index([formId])
   @@index([fieldTypeId])
@@ -613,4 +617,20 @@ model FormFieldResponse {
   @@unique([responseId, fieldId])
   @@index([responseId])
   @@index([fieldId])
+}
+
+model CedisCommitmentPeriod {
+  id             Int       @id @default(autoincrement())
+  cedisId        Int
+  cedis          Cedis     @relation(fields: [cedisId], references: [id], onDelete: Cascade)
+  shiftId        Int?
+  shift          Shift?    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime
+  committedUnits Int
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([cedisId])
+  @@index([shiftId])
 }

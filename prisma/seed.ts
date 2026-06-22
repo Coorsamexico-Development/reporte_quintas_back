@@ -161,6 +161,90 @@ async function main() {
   }
   console.log(`- ${fieldTypes.length} tipos de campo creados/verificados.`);
 
+  // 7. Sembrado de compromisos dinámicos para GDL
+  console.log('Sembrando compromisos para GDL...');
+  const gdlCedis = await prisma.cedis.findFirst({
+    where: { name: { startsWith: 'GDL' } }
+  });
+
+  if (gdlCedis) {
+    // Asegurar que el tipo de compromiso sea SHIFT
+    await prisma.cedis.update({
+      where: { id: gdlCedis.id },
+      data: { commitmentType: 'SHIFT' }
+    });
+
+    // Asegurar los turnos
+    let matutinoShift = await prisma.shift.findFirst({
+      where: { name: 'Matutino', cedisId: gdlCedis.id }
+    });
+    if (!matutinoShift) {
+      matutinoShift = await prisma.shift.create({
+        data: {
+          name: 'Matutino',
+          startTime: '06:00',
+          endTime: '18:00',
+          cedisId: gdlCedis.id
+        }
+      });
+    }
+    let nocturnoShift = await prisma.shift.findFirst({
+      where: { name: 'Nocturno', cedisId: gdlCedis.id }
+    });
+    if (!nocturnoShift) {
+      nocturnoShift = await prisma.shift.create({
+        data: {
+          name: 'Nocturno',
+          startTime: '18:00',
+          endTime: '06:00',
+          cedisId: gdlCedis.id
+        }
+      });
+    }
+
+    // Limpiar periodos existentes para evitar duplicados
+    await prisma.cedisCommitmentPeriod.deleteMany({
+      where: { cedisId: gdlCedis.id }
+    });
+
+    // Crear periodos de compromiso de GDL para 2026
+    const periodsData = [
+      // Enero 1 a Marzo 11: 8 unidades
+      { startDate: '2026-01-01T00:00:00Z', endDate: '2026-03-11T23:59:59Z', committedUnits: 8 },
+      // Marzo 12 a Mayo 24: 7 unidades (cubre segunda mitad de marzo, abril completo y mayo hasta el 24)
+      { startDate: '2026-03-12T00:00:00Z', endDate: '2026-05-24T23:59:59Z', committedUnits: 7 },
+      // Mayo 25 a Mayo 31: 9 unidades
+      { startDate: '2026-05-25T00:00:00Z', endDate: '2026-05-31T23:59:59Z', committedUnits: 9 }
+    ];
+
+    for (const p of periodsData) {
+      // Periodo para Turno Matutino
+      await prisma.cedisCommitmentPeriod.create({
+        data: {
+          cedisId: gdlCedis.id,
+          shiftId: matutinoShift.id,
+          startDate: new Date(p.startDate),
+          endDate: new Date(p.endDate),
+          committedUnits: p.committedUnits
+        }
+      });
+
+      // Periodo para Turno Nocturno
+      await prisma.cedisCommitmentPeriod.create({
+        data: {
+          cedisId: gdlCedis.id,
+          shiftId: nocturnoShift.id,
+          startDate: new Date(p.startDate),
+          endDate: new Date(p.endDate),
+          committedUnits: p.committedUnits
+        }
+      });
+    }
+    console.log('- Compromisos de GDL para 2026 creados con éxito.');
+  } else {
+    console.warn('⚠️ GDL CEDIS no encontrado durante el sembrado.');
+  }
+
   console.log('Seeding completado con éxito.');
 }
 

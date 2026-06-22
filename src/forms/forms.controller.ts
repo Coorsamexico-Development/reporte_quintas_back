@@ -28,7 +28,7 @@ export class FormsController {
   @Roles('ADMIN', 'OPERATOR')
   saveFormFields(
     @Param('cedisId', ParseIntPipe) cedisId: number,
-    @Body() body: { fields: { id?: number; label: string; section?: string; options?: string; fieldTypeId: number; isRequired?: boolean }[] },
+    @Body() body: { fields: { id?: number; label: string; section?: string; options?: string; fieldTypeId: number; isRequired?: boolean; docSection?: string; columnNumber?: number }[] },
     @Request() req
   ) {
     const allowed = req.user?.allowedCedis;

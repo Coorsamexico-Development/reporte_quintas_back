@@ -58,7 +58,7 @@ export class FormsService {
     return form;
   }
 
-  async saveFormFields(cedisId: number, fields: { id?: number; label: string; section?: string; options?: string; fieldTypeId: number; isRequired?: boolean }[]) {
+  async saveFormFields(cedisId: number, fields: { id?: number; label: string; section?: string; options?: string; fieldTypeId: number; isRequired?: boolean; docSection?: string; columnNumber?: number }[]) {
     const form = await this.findFormByCedis(cedisId);
 
     return this.prisma.$transaction(async (tx) => {
@@ -86,6 +86,8 @@ export class FormsService {
               fieldTypeId: Number(field.fieldTypeId),
               isRequired: !!field.isRequired,
               order: index++,
+              docSection: field.docSection || 'BODY',
+              columnNumber: field.columnNumber !== undefined ? Number(field.columnNumber) : 1,
             },
           });
         } else {
@@ -98,6 +100,8 @@ export class FormsService {
               fieldTypeId: Number(field.fieldTypeId),
               isRequired: !!field.isRequired,
               order: index++,
+              docSection: field.docSection || 'BODY',
+              columnNumber: field.columnNumber !== undefined ? Number(field.columnNumber) : 1,
             },
           });
         }
@@ -293,7 +297,7 @@ export class FormsService {
       drawPageDecorations(doc);
 
       // Draw COORSA Logo
-      const logoPath = path.join(process.cwd(), 'uploads', 'logo_coorsa.jpeg');
+      const logoPath = path.join(process.cwd(), 'assets', 'logo_coorsa.jpeg');
       if (fs.existsSync(logoPath)) {
         try {
           doc.image(logoPath, 50, 18, { width: 110 });
@@ -323,7 +327,7 @@ export class FormsService {
       // DATOS GENERALES subtitle
       doc.fillColor('#0A1931').font('Helvetica-Bold').fontSize(11).text('DATOS GENERALES', 50, 100, { width: 512, align: 'center' });
 
-      // Draw metadata general info
+      // Draw metadata general info helper
       const drawMeta = (label: string, value: string, x: number, y: number, fieldWidth: number, labelWidth: number) => {
         doc.font('Helvetica-Bold').fontSize(8.2).fillColor('#0A1931').text(label, x, y);
         doc.font('Helvetica').fontSize(8.2).fillColor('#333333').text(value, x + labelWidth, y, { width: fieldWidth - labelWidth });
@@ -336,23 +340,38 @@ export class FormsService {
       const createdAt = response?.createdAt ? new Date(response.createdAt) : new Date();
       const horaVal = createdAt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-      drawMeta('FECHA:', safeDateStr, 50, 118, 160, 38);
-      drawMeta('N° ECO:', vehicle.truckNumber || 'N/A', 226, 118, 160, 38);
-      drawMeta('TURNO:', shiftName.toUpperCase(), 402, 118, 160, 42);
+      // Identify dynamic HEADER, BODY, and FOOTER fields
+      const headerFields = fields.filter(f => (f.docSection || 'BODY').toUpperCase() === 'HEADER');
+      const bodyFields = fields.filter(f => (f.docSection || 'BODY').toUpperCase() === 'BODY');
+      const footerFields = fields.filter(f => (f.docSection || 'BODY').toUpperCase() === 'FOOTER');
+
+      // Look up specific header fields
+      const horometroField = headerFields.find(f => f.label.toLowerCase().includes('horómet') || f.label.toLowerCase().includes('horomet'));
+      const horometroVal = horometroField ? (answerMap.get(horometroField.id) || 'N/A') : 'N/A';
+
+      const gasolinaField = headerFields.find(f => f.label.toLowerCase().includes('gasolina') || f.label.toLowerCase().includes('combustible'));
+      const gasolinaVal = gasolinaField ? (answerMap.get(gasolinaField.id) || 'N/A') : 'N/A';
+
+      // Draw Row 1 of Header
+      drawMeta('FECHA:', safeDateStr, 50, 118, 130, 38);
+      drawMeta('N° ECO:', vehicle.truckNumber || 'N/A', 190, 118, 110, 38);
+      drawMeta('HOROMETRO:', horometroVal, 310, 118, 130, 64);
       
-      drawMeta('OPERADOR:', operatorName, 50, 138, 336, 58);
-      drawMeta('HORA:', horaVal, 402, 138, 160, 34);
+      // For Turno, print shiftName nicely on the right
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text(shiftName.toUpperCase(), 450, 118, { width: 112, align: 'right' });
+      doc.moveTo(450, 128).lineTo(562, 128).strokeColor('#E0E0E0').lineWidth(0.5).stroke();
 
-      // Separate standard fields and wide fields
-      const sections = new Map<string, any[]>();
-      const wideFields: any[] = [];
+      // Draw Row 2 of Header
+      drawMeta('OPERADOR:', operatorName, 50, 138, 250, 58);
+      drawMeta('HORA:', horaVal, 310, 138, 130, 34);
+      drawMeta('GASOLINA:', gasolinaVal, 450, 138, 112, 54);
+
+      // Collect all images for appendix from all fields
       const imagesToAppend: { label: string; filePath: string }[] = [];
-
       for (const field of fields) {
         const fieldTypeName = field.fieldType?.name?.toUpperCase() || '';
         const value = answerMap.get(field.id) || '';
 
-        // Collect images for appendix
         if (fieldTypeName === 'IMAGE' || fieldTypeName === 'DOCUMENT') {
           const urls = value.split(',').map((u) => u.trim()).filter(Boolean);
           for (let idx = 0; idx < urls.length; idx++) {
@@ -368,163 +387,205 @@ export class FormsService {
             }
           }
         }
-
-        if (fieldTypeName === 'SIGNATURE' || fieldTypeName === 'LONGTEXT') {
-          wideFields.push(field);
-        } else {
-          const sectionName = field.section || 'General';
-          if (!sections.has(sectionName)) {
-            sections.set(sectionName, []);
-          }
-          sections.get(sectionName)!.push(field);
-        }
       }
 
-      // Draw standard fields in 3 columns
-      const columnWidth = 160;
+      // Draw Body fields in 3 columns dynamically
       const colX = [50, 226, 402];
       const colY = [168, 168, 168];
+      const columnWidth = 160;
 
-      for (const [sectionName, sectionFields] of sections) {
-        // Find column with minimum Y
-        let minColIdx = 0;
-        let minY = colY[0];
-        for (let i = 1; i < colY.length; i++) {
-          if (colY[i] < minY) {
-            minY = colY[i];
-            minColIdx = i;
+      // Group fields in each column by section while preserving relative order
+      const getSectionsInColumn = (colFields: any[]) => {
+        const orderedSections: { name: string; fields: any[] }[] = [];
+        const sectionMap = new Map<string, any[]>();
+        for (const field of colFields) {
+          const secName = field.section || 'General';
+          if (!sectionMap.has(secName)) {
+            const secObj = { name: secName, fields: [] };
+            orderedSections.push(secObj);
+            sectionMap.set(secName, secObj.fields);
           }
+          sectionMap.get(secName)!.push(field);
         }
+        return orderedSections;
+      };
 
-        const x = colX[minColIdx];
-        let y = colY[minColIdx];
+      const columnsFields = [
+        bodyFields.filter(f => Number(f.columnNumber || 1) === 1),
+        bodyFields.filter(f => Number(f.columnNumber) === 2),
+        bodyFields.filter(f => Number(f.columnNumber) === 3)
+      ];
 
-        // Draw Section Header
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text(sectionName.toUpperCase(), x, y);
-        y = doc.y + 1;
-        doc.moveTo(x, y).lineTo(x + columnWidth, y).strokeColor('#0A1931').lineWidth(0.8).stroke();
-        y += 4;
+      for (let i = 0; i < 3; i++) {
+        const x = colX[i];
+        let y = colY[i];
+        const secList = getSectionsInColumn(columnsFields[i]);
 
-        // Draw Section Fields
-        for (const field of sectionFields) {
-          const value = answerMap.get(field.id) || '';
-          const fieldTypeName = field.fieldType?.name?.toUpperCase() || '';
+        for (const sec of secList) {
+          // Draw Section Header
+          doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text(sec.name.toUpperCase(), x, y);
+          y = doc.y + 1;
+          doc.moveTo(x, y).lineTo(x + columnWidth, y).strokeColor('#0A1931').lineWidth(0.8).stroke();
+          y += 4;
 
-          if (fieldTypeName === 'CHECK') {
-            // Draw Checkbox Vector
-            doc.save();
-            doc.rect(x, y + 1, 8, 8).strokeColor('#0A1931').lineWidth(0.8).stroke();
-            const isChecked = value === 'true' || value === '1';
-            if (isChecked) {
-              // Green Check
-              doc.moveTo(x + 1.5, y + 4.5)
-                 .lineTo(x + 3.5, y + 6.5)
-                 .lineTo(x + 6.5, y + 2.5)
-                 .strokeColor('#008000')
-                 .lineWidth(1.2)
-                 .stroke();
+          // Draw Section Fields
+          for (const field of sec.fields) {
+            const value = answerMap.get(field.id) || '';
+            const fieldTypeName = field.fieldType?.name?.toUpperCase() || '';
+
+            if (fieldTypeName === 'CHECK') {
+              // Draw Checkbox Vector
+              doc.save();
+              doc.rect(x, y + 1, 8, 8).strokeColor('#0A1931').lineWidth(0.8).stroke();
+              const isChecked = value === 'true' || value === '1';
+              if (isChecked) {
+                // Green Check
+                doc.moveTo(x + 1.5, y + 4.5)
+                   .lineTo(x + 3.5, y + 6.5)
+                   .lineTo(x + 6.5, y + 2.5)
+                   .strokeColor('#008000')
+                   .lineWidth(1.2)
+                   .stroke();
+              } else {
+                // Red Cross
+                doc.moveTo(x + 2, y + 2)
+                   .lineTo(x + 6, y + 6)
+                   .moveTo(x + 6, y + 2)
+                   .lineTo(x + 2, y + 6)
+                   .strokeColor('#F51720')
+                   .lineWidth(1.2)
+                   .stroke();
+              }
+              doc.restore();
+
+              doc.font('Helvetica').fontSize(8).fillColor('#333333').text(field.label, x + 12, y, { width: columnWidth - 12 });
+              y = doc.y + 2;
             } else {
-              // Red Cross
-              doc.moveTo(x + 2, y + 2)
-                 .lineTo(x + 6, y + 6)
-                 .moveTo(x + 6, y + 2)
-                 .lineTo(x + 2, y + 6)
-                 .strokeColor('#F51720')
-                 .lineWidth(1.2)
-                 .stroke();
-            }
-            doc.restore();
+              // Draw standard text/select fields
+              let displayVal = value || 'N/A';
+              if (fieldTypeName === 'IMAGE') {
+                const count = value.split(',').filter(Boolean).length;
+                displayVal = count > 0 ? `📷 [${count} img]` : 'Sin imagen';
+              } else if (fieldTypeName === 'DOCUMENT') {
+                const count = value.split(',').filter(Boolean).length;
+                displayVal = count > 0 ? `📄 [${count} doc]` : 'Sin doc';
+              }
 
-            doc.font('Helvetica').fontSize(8).fillColor('#333333').text(field.label, x + 12, y, { width: columnWidth - 12 });
-            y = doc.y + 2;
-          } else {
-            // Draw standard text/select fields
-            let displayVal = value || 'N/A';
-            if (fieldTypeName === 'IMAGE') {
-              const count = value.split(',').filter(Boolean).length;
-              displayVal = count > 0 ? `📷 [${count} img]` : 'Sin imagen';
-            } else if (fieldTypeName === 'DOCUMENT') {
-              const count = value.split(',').filter(Boolean).length;
-              displayVal = count > 0 ? `📄 [${count} doc]` : 'Sin doc';
+              doc.font('Helvetica-Bold').fontSize(8).fillColor('#0A1931').text(`${field.label}: `, x, y, { width: columnWidth, continued: true });
+              doc.font('Helvetica').fontSize(8).fillColor('#333333').text(displayVal);
+              y = doc.y + 2;
             }
-
-            doc.font('Helvetica-Bold').fontSize(8).fillColor('#0A1931').text(`${field.label}: `, x, y, { width: columnWidth, continued: true });
-            doc.font('Helvetica').fontSize(8).fillColor('#333333').text(displayVal);
-            y = doc.y + 2;
           }
+          y += 8; // section gap
         }
-
-        y += 8; // section gap
-        colY[minColIdx] = y;
+        colY[i] = y;
       }
 
-      // Render wide fields (Signature, Comments/LongText)
+      // Render Footer fields (Signature, Comments/LongText, Validation)
       let currentY = Math.max(...colY) + 15;
 
-      if (wideFields.length > 0) {
+      if (footerFields.length > 0) {
         if (currentY > 580) {
           doc.addPage();
           drawPageDecorations(doc);
           currentY = 110;
         }
 
-        for (const field of wideFields) {
-          const value = answerMap.get(field.id) || '';
-          const fieldTypeName = field.fieldType?.name?.toUpperCase() || '';
+        // 1. Draw Comments / Observaciones (LONGTEXT) first if present
+        const commentField = footerFields.find(f => f.fieldType?.name?.toUpperCase() === 'LONGTEXT');
+        if (commentField) {
+          const val = answerMap.get(commentField.id) || '';
+          doc.save();
+          doc.rect(50, currentY, 512, 55).fillColor('#F9F9F9').strokeColor('#E0E0E0').lineWidth(0.5).fillAndStroke();
+          doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text(commentField.label.toUpperCase(), 58, currentY + 6);
+          doc.font('Helvetica').fontSize(8).fillColor('#333333').text(val || 'Sin observaciones.', 58, currentY + 18, { width: 496, height: 32 });
+          doc.restore();
+          currentY += 65;
+        }
 
-          if (fieldTypeName === 'LONGTEXT') {
-            if (currentY + 65 > 730) {
-              doc.addPage();
-              drawPageDecorations(doc);
-              currentY = 110;
-            }
+        // 2. Draw Signature and Validation side-by-side
+        if (currentY + 95 > 730) {
+          doc.addPage();
+          drawPageDecorations(doc);
+          currentY = 110;
+        }
 
-            doc.save();
-            doc.rect(50, currentY, 512, 55).fillColor('#F9F9F9').strokeColor('#E0E0E0').lineWidth(0.5).fillAndStroke();
-            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text(field.label.toUpperCase(), 58, currentY + 6);
-            doc.font('Helvetica').fontSize(8).fillColor('#333333').text(value || 'Sin observaciones.', 58, currentY + 18, { width: 496, height: 32 });
-            doc.restore();
-            currentY += 65;
-          } else if (fieldTypeName === 'SIGNATURE') {
-            if (currentY + 95 > 730) {
-              doc.addPage();
-              drawPageDecorations(doc);
-              currentY = 110;
-            }
+        const signatureField = footerFields.find(f => f.fieldType?.name?.toUpperCase() === 'SIGNATURE');
+        const validationField = footerFields.find(f => f.label.toLowerCase().includes('validac') || f.label.toLowerCase().includes('validación'));
 
-            let sigBuffer: Buffer | null = null;
-            if (value) {
-              try {
-                if (value.startsWith('data:image')) {
-                  const base64Data = value.replace(/^data:image\/\w+;base64,/, '');
-                  sigBuffer = Buffer.from(base64Data, 'base64');
-                } else if (value.startsWith('/uploads/')) {
-                  const absPath = path.join(process.cwd(), value);
-                  if (fs.existsSync(absPath)) {
-                    sigBuffer = fs.readFileSync(absPath);
-                  }
-                } else {
-                  sigBuffer = Buffer.from(value, 'base64');
+        if (signatureField) {
+          const sigValue = answerMap.get(signatureField.id) || '';
+          let sigBuffer: Buffer | null = null;
+          if (sigValue) {
+            try {
+              if (sigValue.startsWith('data:image')) {
+                const base64Data = sigValue.replace(/^data:image\/\w+;base64,/, '');
+                sigBuffer = Buffer.from(base64Data, 'base64');
+              } else if (sigValue.startsWith('/uploads/')) {
+                const absPath = path.join(process.cwd(), sigValue);
+                if (fs.existsSync(absPath)) {
+                  sigBuffer = fs.readFileSync(absPath);
                 }
-              } catch (err) {
-                console.error('Error loading signature image:', err);
+              } else {
+                sigBuffer = Buffer.from(sigValue, 'base64');
               }
+            } catch (err) {
+              console.error('Error loading signature image:', err);
             }
-
-            const boxX = 186; // Centered 240px wide box
-            doc.save();
-            doc.rect(boxX, currentY, 240, 70).strokeColor('#CCCCCC').lineWidth(0.5).stroke();
-            if (sigBuffer) {
-              try {
-                doc.image(sigBuffer, boxX + 5, currentY + 5, { fit: [230, 60], align: 'center', valign: 'center' });
-              } catch (e) {
-                console.error('Error drawing signature image:', e);
-              }
-            }
-            doc.font('Helvetica-Bold').fontSize(8).fillColor('#0A1931').text(field.label.toUpperCase(), boxX, currentY + 75, { width: 240, align: 'center' });
-            doc.restore();
-            currentY += 95;
           }
+
+          doc.save();
+          // Centered signature box on the left: x=50, width=240
+          doc.rect(50, currentY, 240, 70).strokeColor('#CCCCCC').lineWidth(0.5).stroke();
+          if (sigBuffer) {
+            try {
+              doc.image(sigBuffer, 55, currentY + 5, { fit: [230, 60], align: 'center', valign: 'center' });
+            } catch (e) {
+              console.error('Error drawing signature image:', e);
+            }
+          }
+          doc.font('Helvetica-Bold').fontSize(8).fillColor('#0A1931').text(signatureField.label.toUpperCase(), 50, currentY + 75, { width: 240, align: 'center' });
+          doc.restore();
+        }
+
+        if (validationField) {
+          const valValue = (answerMap.get(validationField.id) || '').toUpperCase();
+          const isOperative = valValue.includes('OPERATIVA') && !valValue.includes('NO OPERATIVA');
+          const isNotOperative = valValue.includes('NO OPERATIVA');
+
+          doc.save();
+          const valY = currentY + 20;
+          doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text('VALIDACIÓN DE UNIDAD', 310, valY - 12);
+          
+          // Draw Operativa checkbox
+          doc.rect(310, valY + 2, 10, 10).strokeColor('#0A1931').lineWidth(0.8).stroke();
+          if (isOperative) {
+            doc.moveTo(312, valY + 6)
+               .lineTo(315, valY + 9)
+               .lineTo(319, valY + 4)
+               .strokeColor('#008000')
+               .lineWidth(1.5)
+               .stroke();
+          }
+          doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text('OPERATIVA', 326, valY + 3);
+
+          // Draw No Operativa checkbox
+          doc.rect(420, valY + 2, 10, 10).strokeColor('#0A1931').lineWidth(0.8).stroke();
+          if (isNotOperative) {
+            doc.moveTo(422, valY + 6)
+               .lineTo(425, valY + 9)
+               .lineTo(429, valY + 4)
+               .strokeColor('#F51720')
+               .lineWidth(1.5)
+               .stroke();
+          }
+          doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0A1931').text('NO OPERATIVA', 436, valY + 3);
+
+          // Underline text to look like signature or approval
+          doc.moveTo(310, valY + 45).lineTo(550, valY + 45).strokeColor('#CCCCCC').lineWidth(0.5).stroke();
+          doc.font('Helvetica').fontSize(8).fillColor('#666666').text('FIRMA / APROBACIÓN DE OPERACIÓN', 310, valY + 49, { width: 240, align: 'center' });
+
+          doc.restore();
         }
       }
 

@@ -63,17 +63,50 @@ export class ShiftsService {
   async findAssignments(cedisId: number, dateStr: string) {
     // Normalizar la fecha a medianoche UTC
     const date = new Date(`${dateStr}T00:00:00.000Z`);
-    return this.prisma.vehicleShiftAssignment.findMany({
-      where: {
-        date,
-        shift: {
-          cedisId: Number(cedisId),
+    const [assignments, formResponses] = await Promise.all([
+      this.prisma.vehicleShiftAssignment.findMany({
+        where: {
+          date,
+          shift: {
+            cedisId: Number(cedisId),
+          },
         },
-      },
-      include: {
-        shift: true,
-        vehicle: true,
-      },
+        include: {
+          shift: true,
+          vehicle: true,
+        },
+      }),
+      this.prisma.vehicleShiftFormResponse.findMany({
+        where: {
+          date,
+          shift: {
+            cedisId: Number(cedisId),
+          },
+        },
+        include: {
+          answers: {
+            include: {
+              field: {
+                include: {
+                  fieldType: true,
+                },
+              },
+            },
+          },
+        },
+      })
+    ]);
+
+    return assignments.map(a => {
+      const response = formResponses.find(r => r.shiftId === a.shiftId && r.vehicleId === a.vehicleId);
+      return {
+        ...a,
+        formResponse: response ? {
+          id: response.id,
+          pdfUrl: response.pdfUrl,
+          answers: response.answers,
+        } : null,
+      };
     });
   }
 
