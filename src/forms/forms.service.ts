@@ -285,7 +285,7 @@ export class FormsService {
         
         // Footer text inside the navy bar
         pdfDoc.font('Helvetica').fontSize(7.5).fillColor('#FFFFFF').text(
-          `Generado automáticamente el ${new Date().toLocaleString('es-MX')} — ID de inspección: ${responseId}`,
+          `Generado automáticamente el ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })} — ID de inspección: ${responseId}`,
           50,
           777,
           { width: 512, align: 'center' }
@@ -338,7 +338,7 @@ export class FormsService {
 
       // Format time
       const createdAt = response?.createdAt ? new Date(response.createdAt) : new Date();
-      const horaVal = createdAt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const horaVal = createdAt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Mexico_City' });
 
       // Identify dynamic HEADER, BODY, and FOOTER fields
       const headerFields = fields.filter(f => (f.docSection || 'BODY').toUpperCase() === 'HEADER');

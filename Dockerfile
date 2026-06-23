@@ -39,6 +39,7 @@ RUN mkdir -p /app/uploads
 
 # Variables de entorno por defecto (se sobreescriben en Cloud Run)
 ENV NODE_ENV=production
+ENV TZ=America/Mexico_City
 
 CMD ["node", "dist/src/main.js"]
 
