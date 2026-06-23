@@ -347,13 +347,7 @@ export class AnalyticsService {
             const trends: any[] = [];
 
             for (const t of turnos) {
-                // Map shift names to match the local database names
-                let shiftName = t.name;
-                if (shiftName === '1T') {
-                    shiftName = 'Matutino';
-                } else if (shiftName === '2T') {
-                    shiftName = 'Nocturno';
-                }
+                const shiftName = t.name;
 
                 const dias = t.turno_dias || [];
                 for (const d of dias) {
