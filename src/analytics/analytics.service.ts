@@ -311,112 +311,89 @@ export class AnalyticsService {
     }
 
     async getOperationalTrends() {
-        const [assignments, cedisList, commitmentPeriods] = await Promise.all([
-            this.prisma.vehicleShiftAssignment.findMany({
-                include: {
-                    shift: {
-                        select: {
-                            id: true,
-                            name: true,
-                            cedisId: true,
-                            cedis: {
-                                select: {
-                                    name: true
+        try {
+            const now = new Date();
+            // Get yesterday (hoy - 1 dia)
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            const yyyy = yesterday.getFullYear();
+            const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+            const dd = String(yesterday.getDate()).padStart(2, '0');
+            const fechaFin = `${yyyy}-${mm}-${dd}`;
+            const fechaInicio = `${yyyy}-01-01`;
+
+            console.log(`[Trends] Fetching CECO 120 from ${fechaInicio} to ${fechaFin}...`);
+
+            const url = 'https://coorsamexico-operaciones-401457559403.us-central1.run.app/api/v1/turnos/get/by/ceco/rango';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    cecoId: 120,
+                    fechaInicio,
+                    fechaFin
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch from external API: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const ceco = data.ceco || {};
+            const turnos = ceco.turnos || [];
+
+            const trends: any[] = [];
+
+            for (const t of turnos) {
+                // Map shift names to match the local database names
+                let shiftName = t.name;
+                if (shiftName === '1T') {
+                    shiftName = 'Matutino';
+                } else if (shiftName === '2T') {
+                    shiftName = 'Nocturno';
+                }
+
+                const dias = t.turno_dias || [];
+                for (const d of dias) {
+                    const date = d.fecha_turno;
+                    const commitment = d.capacidad || 0;
+
+                    let operational = 0;
+                    const ctrl = d.control_asistencias;
+                    if (ctrl) {
+                        if (Array.isArray(ctrl)) {
+                            for (const item of ctrl) {
+                                if (item.activo !== 0) {
+                                    operational += item.asistencias || 0;
                                 }
                             }
-                        }
-                    }
-                },
-                orderBy: [
-                    { date: 'asc' }
-                ]
-            }),
-            this.prisma.cedis.findMany({
-                include: {
-                    shifts: {
-                        where: { isActive: true }
-                    }
-                }
-            }),
-            this.prisma.cedisCommitmentPeriod.findMany()
-        ]);
-
-        // Map CEDIS for quick lookup
-        const cedisMap = new Map<number, any>();
-        for (const c of cedisList) {
-            cedisMap.set(c.id, c);
-        }
-
-        // Group by date, CEDIS, and shift
-        const trendsMap = new Map<string, { date: string, shiftName: string, cedisName: string, cedisId: number, operational: number, available: number, backup: number, commitment: number }>();
-
-        for (const a of assignments) {
-            const dateStr = a.date.toISOString().split('T')[0];
-            const shiftName = a.shift?.name || 'Turno';
-            const cedisName = a.shift?.cedis?.name || 'CEDIS';
-            const cedisId = a.shift?.cedisId || 0;
-            const shiftId = a.shift?.id || 0;
-            const key = `${dateStr}_${cedisId}_${shiftName}`;
-
-            if (!trendsMap.has(key)) {
-                // Calculate commitment for this date, CEDIS, and shift
-                let commitment = 0;
-                
-                // Try to find a dynamic commitment period first
-                const dynamicMatch = commitmentPeriods.find(p => 
-                    p.cedisId === cedisId &&
-                    p.shiftId === shiftId &&
-                    a.date.getTime() >= p.startDate.getTime() &&
-                    a.date.getTime() <= p.endDate.getTime()
-                ) || commitmentPeriods.find(p => 
-                    p.cedisId === cedisId &&
-                    p.shiftId === null &&
-                    a.date.getTime() >= p.startDate.getTime() &&
-                    a.date.getTime() <= p.endDate.getTime()
-                );
-
-                if (dynamicMatch) {
-                    commitment = dynamicMatch.committedUnits;
-                } else {
-                    const cedisObj = cedisMap.get(cedisId);
-                    if (cedisObj) {
-                        if (cedisObj.commitmentType === 'SHIFT') {
-                            const shiftObj = cedisObj.shifts.find((s: any) => s.id === shiftId);
-                            if (shiftObj) {
-                                const validUntilObj = shiftObj.validUntil ? new Date(shiftObj.validUntil) : null;
-                                const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
-                                commitment = isExpired ? (shiftObj.nextCommittedUnits ?? shiftObj.committedUnits) : shiftObj.committedUnits;
+                        } else if (typeof ctrl === 'object') {
+                            if (ctrl.activo !== 0) {
+                                operational = ctrl.asistencias || 0;
                             }
-                        } else {
-                            const validUntilObj = cedisObj.validUntil ? new Date(cedisObj.validUntil) : null;
-                            const isExpired = validUntilObj && a.date.getTime() >= validUntilObj.getTime();
-                            commitment = isExpired ? (cedisObj.nextCommittedUnits ?? cedisObj.committedUnits) : cedisObj.committedUnits;
                         }
                     }
+
+                    trends.push({
+                        date,
+                        shiftName,
+                        cedisName: 'GDL ',
+                        cedisId: 2,
+                        operational,
+                        available: 0,
+                        backup: 0,
+                        commitment
+                    });
                 }
-
-                trendsMap.set(key, {
-                    date: dateStr,
-                    shiftName,
-                    cedisName,
-                    cedisId,
-                    operational: 0,
-                    available: 0,
-                    backup: 0,
-                    commitment
-                });
             }
 
-            const entry = trendsMap.get(key)!;
-            if (a.status === 'OPERATIONAL') {
-                entry.operational++;
-            } else if (a.status === 'AVAILABLE') {
-                entry.available++;
-            } else if (a.status === 'BACKUP') {
-                entry.backup++;
-            }
+            console.log(`[Trends] Mapped ${trends.length} daily trends from CECO 120.`);
+            return trends;
+        } catch (error) {
+            console.error('Error fetching operational trends for CECO 120:', error);
+            return [];
         }
-
-        return Array.from(trendsMap.values());
     }
 }
