@@ -231,16 +231,17 @@ export class VehiclesService {
                 },
                 faults: {
                     where: { isActive: true },
-                    include: { evidence: true },
+                    include: { evidence: true, user: true },
                     orderBy: { reportedAt: 'desc' }
                 },
                 partExchanges: {
                     where: { isActive: true },
-                    include: { product: true, evidence: true },
+                    include: { product: true, evidence: true, user: true },
                     orderBy: { date: 'desc' }
                 },
                 tireRotations: {
                     where: { isActive: true },
+                    include: { user: true },
                     orderBy: { date: 'desc' }
                 },
                 scheduledMaintenances: {
@@ -290,6 +291,7 @@ export class VehiclesService {
                 date: fault.reportedAt,
                 title: 'Reporte de Avería',
                 description: fault.description,
+                user: fault.user?.name,
                 meta: { 
                     severity: fault.severity, 
                     status: fault.status,
@@ -305,6 +307,7 @@ export class VehiclesService {
                     date: ex.date,
                     title: `Canibalización: ${actionLabel} de ${ex.product.name}`,
                     description: ex.description,
+                    user: ex.user?.name,
                     meta: { 
                         product: ex.product.name, 
                         productCode: ex.product.code, 
@@ -320,6 +323,7 @@ export class VehiclesService {
                 date: rot.date,
                 title: 'Rotación de Llantas',
                 description: rot.description,
+                user: rot.user?.name,
                 meta: { mileage: rot.mileage }
             })),
             ...vehicle.scheduledMaintenances.map(sched => ({

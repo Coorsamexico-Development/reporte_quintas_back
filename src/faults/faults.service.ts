@@ -18,7 +18,7 @@ export class FaultsService {
     private readonly storage: StorageService
   ) {}
 
-  async reportFault(data: CreateFaultDto, files?: Express.Multer.File[]) {
+  async reportFault(data: CreateFaultDto, files?: Express.Multer.File[], userId?: number) {
     try {
       const vId = Number(data.vehicleId);
       const vehicle = await this.db.vehicle.findUnique({ where: { id: vId } });
@@ -33,6 +33,7 @@ export class FaultsService {
           description: data.description,
           severity: data.severity,
           status: FaultStatus.PENDING,
+          userId: userId ? Number(userId) : null,
         },
       });
 

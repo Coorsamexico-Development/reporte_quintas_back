@@ -385,9 +385,12 @@ export class MaintenanceService {
         date: Date;
         description: string;
         mileage?: number;
-    }) {
+    }, userId?: number) {
         return this.prisma.tireRotation.create({
-            data,
+            data: {
+                ...data,
+                userId: userId ? Number(userId) : null
+            },
         });
     }
 
@@ -401,7 +404,8 @@ export class MaintenanceService {
             targetVehicleId?: number;
             cost?: number;
         },
-        files?: Express.Multer.File[]
+        files?: Express.Multer.File[],
+        userId?: number
     ) {
         const vehicle = await this.prisma.vehicle.findUnique({ where: { id: data.vehicleId } });
         const truckNumber = vehicle?.truckNumber || 'unknown';
@@ -432,6 +436,7 @@ export class MaintenanceService {
                         action: 'RETIRO',
                         description: `Canibalización: Se retiró pieza para instalarse en Unidad ${targetVehicleTruckNumber}. Notas: ${data.description}`,
                         cost: exchangeCost,
+                        userId: userId ? Number(userId) : null,
                         evidence: {
                             create: evidenceUrls.map(url => ({ url }))
                         }
@@ -445,6 +450,7 @@ export class MaintenanceService {
                         action: 'INSTALACION',
                         description: `Canibalización: Componente instalado proveniente de Unidad ${truckNumber}. Notas: ${data.description}`,
                         cost: exchangeCost,
+                        userId: userId ? Number(userId) : null,
                         evidence: {
                             create: evidenceUrls.map(url => ({ url }))
                         }
@@ -462,6 +468,7 @@ export class MaintenanceService {
                 action: data.action,
                 description: data.description,
                 cost: exchangeCost,
+                userId: userId ? Number(userId) : null,
                 evidence: {
                     create: evidenceUrls.map(url => ({ url }))
                 }

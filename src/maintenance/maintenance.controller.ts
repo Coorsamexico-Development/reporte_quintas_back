@@ -54,9 +54,11 @@ export class MaintenanceController {
             description: string;
             mileage?: number;
         },
+        @Req() req: any
     ) {
         if (data.date) data.date = new Date(data.date);
-        return this.maintenanceService.recordTireRotation(data);
+        const userId = req.user?.userId ? Number(req.user.userId) : undefined;
+        return this.maintenanceService.recordTireRotation(data, userId);
     }
 
     @Post('part-exchange')
@@ -65,6 +67,7 @@ export class MaintenanceController {
     recordPartExchange(
         @UploadedFiles() files: Express.Multer.File[],
         @Body() data: any,
+        @Req() req: any
     ) {
         const payload = {
             vehicleId: Number(data.vehicleId),
@@ -75,7 +78,8 @@ export class MaintenanceController {
             description: data.description,
             cost: data.cost ? Number(data.cost) : undefined,
         };
-        return this.maintenanceService.recordPartExchange(payload, files);
+        const userId = req.user?.userId ? Number(req.user.userId) : undefined;
+        return this.maintenanceService.recordPartExchange(payload, files, userId);
     }
 
     @Get('product-cost-history')

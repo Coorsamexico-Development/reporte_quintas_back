@@ -16,9 +16,11 @@ export class FaultsController {
   @UseInterceptors(FilesInterceptor('files'))
   reportFault(
     @Body() createFaultDto: CreateFaultDto,
+    @Request() req: any,
     @UploadedFiles() files?: Express.Multer.File[]
   ) {
-    return this.faultsService.reportFault(createFaultDto, files);
+    const userId = req.user?.userId ? Number(req.user.userId) : undefined;
+    return this.faultsService.reportFault(createFaultDto, files, userId);
   }
 
   @Get('vehicle/:id')
