@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, ParseIntPipe, UseGuards, Request, Res, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, ParseIntPipe, UseGuards, Request, Res, ForbiddenException, NotFoundException, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { FormsService } from './forms.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -117,6 +118,30 @@ export class FormsController {
     }
 
     return this.formsService.deleteInspection(responseId);
+  }
+
+  @Post('inspections/upload')
+  @Roles('ADMIN', 'OPERATOR')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadInspection(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { date: string; shiftId: string; vehicleId: string },
+  ) {
+    if (!file) {
+      throw new BadRequestException('El archivo de inspección es requerido');
+    }
+    const userId = Number(req.user?.userId);
+    const vehicleId = Number(body.vehicleId);
+    const shiftId = Number(body.shiftId);
+    const dateStr = body.date;
+
+    return this.formsService.uploadInspection(userId, {
+      vehicleId,
+      shiftId,
+      date: dateStr,
+      file,
+    });
   }
 
   @Get('compliance-matrix')

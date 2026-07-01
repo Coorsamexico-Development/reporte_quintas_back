@@ -222,6 +222,88 @@ export class FormsService {
     }
   }
 
+  async uploadInspection(
+    userId: number,
+    data: { vehicleId: number; shiftId: number; date: string; file: Express.Multer.File }
+  ) {
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: Number(data.vehicleId) },
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException(`Unidad con ID ${data.vehicleId} no encontrada.`);
+    }
+
+    if (!vehicle.currentCedisId) {
+      throw new BadRequestException(`La unidad #${vehicle.truckNumber} no tiene un CEDIS asignado actualmente.`);
+    }
+
+    const form = await this.findFormByCedis(vehicle.currentCedisId);
+    const date = new Date(`${data.date}T00:00:00.000Z`);
+    const shiftId = Number(data.shiftId);
+    const vehicleId = Number(data.vehicleId);
+
+    // Check if there's an existing response and delete its old file if present
+    const existing = await this.prisma.vehicleShiftFormResponse.findUnique({
+      where: {
+        date_shiftId_vehicleId: {
+          date,
+          shiftId,
+          vehicleId,
+        },
+      },
+      select: { id: true, pdfUrl: true },
+    });
+
+    if (existing && existing.pdfUrl) {
+      // Delete old file
+      if (existing.pdfUrl.startsWith('http')) {
+        try {
+          await this.storageService.deleteFile(existing.pdfUrl);
+        } catch (err) {
+          console.error('Error deleting old PDF from GCS:', err);
+        }
+      } else {
+        try {
+          const absolutePath = path.join(process.cwd(), existing.pdfUrl);
+          if (fs.existsSync(absolutePath)) {
+            fs.unlinkSync(absolutePath);
+          }
+        } catch (err) {
+          console.error('Error deleting old local PDF file:', err);
+        }
+      }
+    }
+
+    // Upload new file
+    const pdfUrl = await this.storageService.uploadFile(data.file, 'inspections');
+
+    // Upsert the response record
+    const response = await this.prisma.vehicleShiftFormResponse.upsert({
+      where: {
+        date_shiftId_vehicleId: {
+          date,
+          shiftId,
+          vehicleId,
+        },
+      },
+      update: {
+        userId,
+        pdfUrl,
+      },
+      create: {
+        form: { connect: { id: form.id } },
+        date,
+        shift: { connect: { id: shiftId } },
+        vehicle: { connect: { id: vehicleId } },
+        user: { connect: { id: userId } },
+        pdfUrl,
+      },
+    });
+
+    return { success: true, responseId: response.id, pdfUrl };
+  }
+
   private async generateInspectionPdf(
     responseId: number,
     vehicle: any,
