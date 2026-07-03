@@ -310,7 +310,7 @@ export class AnalyticsService {
         };
     }
 
-    async getOperationalTrends() {
+    async getOperationalTrends(cedisId?: number) {
         try {
             const now = new Date();
             // Get yesterday (hoy - 1 dia)
@@ -321,7 +321,18 @@ export class AnalyticsService {
             const fechaFin = `${yyyy}-${mm}-${dd}`;
             const fechaInicio = `${yyyy}-01-01`;
 
-            console.log(`[Trends] Fetching CECO 120 from ${fechaInicio} to ${fechaFin}...`);
+            // Default to GDL (120 / local ID 2)
+            let targetCeco = 120;
+            let localName = 'GDL ';
+            let localId = 2;
+
+            if (cedisId === 1) {
+                targetCeco = 202;
+                localName = 'CDU';
+                localId = 1;
+            }
+
+            console.log(`[Trends] Fetching CECO ${targetCeco} for local CEDIS ${localId} from ${fechaInicio} to ${fechaFin}...`);
 
             const url = 'https://coorsamexico-operaciones-401457559403.us-central1.run.app/api/v1/turnos/get/by/ceco/rango';
             const response = await fetch(url, {
@@ -330,25 +341,24 @@ export class AnalyticsService {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    cecoId: 120,
+                    cecoId: targetCeco,
                     fechaInicio,
                     fechaFin
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to fetch from external API: ${response.statusText}`);
+                throw new Error(`Failed to fetch from external API for CECO ${targetCeco}: ${response.statusText}`);
             }
 
             const data = await response.json();
-            const ceco = data.ceco || {};
-            const turnos = ceco.turnos || [];
+            const cecoData = data.ceco || {};
+            const turnos = cecoData.turnos || [];
 
             const trends: any[] = [];
 
             for (const t of turnos) {
                 const shiftName = t.name;
-
                 const dias = t.turno_dias || [];
                 for (const d of dias) {
                     const date = d.fecha_turno;
@@ -373,8 +383,8 @@ export class AnalyticsService {
                     trends.push({
                         date,
                         shiftName,
-                        cedisName: 'GDL ',
-                        cedisId: 2,
+                        cedisName: localName,
+                        cedisId: localId,
                         operational,
                         available: 0,
                         backup: 0,
@@ -383,10 +393,10 @@ export class AnalyticsService {
                 }
             }
 
-            console.log(`[Trends] Mapped ${trends.length} daily trends from CECO 120.`);
+            console.log(`[Trends] Mapped ${trends.length} daily trends from CECO ${targetCeco}.`);
             return trends;
         } catch (error) {
-            console.error('Error fetching operational trends for CECO 120:', error);
+            console.error('Error fetching operational trends:', error);
             return [];
         }
     }

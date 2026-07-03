@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -10,26 +10,26 @@ export class AnalyticsController {
     constructor(private readonly analyticsService: AnalyticsService) { }
 
     @Get('expenses')
-    @Roles('ADMIN', 'OPERATOR') // All authenticated roles can view analytics
+    @Roles('ADMIN', 'OPERATOR', 'CLIENTE')
     async getExpenses() {
         return await this.analyticsService.getExpenses();
     }
 
     @Get('activity')
-    @Roles('ADMIN', 'OPERATOR') // All authenticated roles can view analytics
+    @Roles('ADMIN', 'OPERATOR')
     async getRecentActivity() {
         return await this.analyticsService.getRecentActivity();
     }
 
     @Get('global-summary')
-    @Roles('ADMIN', 'OPERATOR')
+    @Roles('ADMIN', 'OPERATOR', 'CLIENTE')
     async getGlobalSummary() {
         return await this.analyticsService.getGlobalSummary();
     }
 
     @Get('operational-trends')
     @Roles('ADMIN', 'OPERATOR', 'CLIENTE')
-    async getOperationalTrends() {
-        return await this.analyticsService.getOperationalTrends();
+    async getOperationalTrends(@Query('cedisId') cedisId?: string) {
+        return await this.analyticsService.getOperationalTrends(cedisId ? Number(cedisId) : undefined);
     }
 }
