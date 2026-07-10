@@ -19,6 +19,7 @@ model User {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   inventoryMovements           InventoryMovement[]
+  deletedMovements             InventoryMovement[] @relation("DeletedMovements")
   maintenanceLogs              Maintenance[]
   vehicleMovements             VehicleMovement[]
   inventoryMovementAdjustments InventoryMovementAdjustment[]
@@ -157,7 +158,6 @@ model VehicleDocumentEvidence {
 model Maintenance {
   id                     Int                   @id @default(autoincrement())
   vehicleId              Int
-  type                   MaintenanceType_OLD?  @map("type")
   maintenanceTypeId      Int?                  @map("maintenance_type_id")
   description            String                @db.Text
   date                   DateTime              @default(now())
@@ -254,7 +254,6 @@ model ScheduledMaintenance {
   title             String
   description       String?
   date              DateTime
-  type              MaintenanceType_OLD @default(PREVENTIVE) @map("type")
   maintenanceTypeId Int?                @map("maintenance_type_id")
   status            MaintenanceStatus   @default(SCHEDULED)
   createdAt         DateTime            @default(now())
@@ -345,9 +344,15 @@ model InventoryMovement {
   evidence    InventoryMovementEvidence[]
   adjustments InventoryMovementAdjustment[]
 
+  isActive     Boolean                     @default(true)
+  deleteReason String?                     @db.Text
+  deletedBy    Int?
+  deletedByUser User?                      @relation("DeletedMovements", fields: [deletedBy], references: [id])
+
   @@index([cedisId], map: "InventoryMovement_cedisId_fkey")
   @@index([productId], map: "InventoryMovement_productId_fkey")
   @@index([userId], map: "InventoryMovement_userId_fkey")
+  @@index([deletedBy], map: "InventoryMovement_deletedBy_fkey")
 }
 
 model InventoryMovementEvidence {
@@ -462,10 +467,7 @@ model MaintenanceType {
   ticketItems           MaintenanceTicketItem[]
 }
 
-enum MaintenanceType_OLD {
-  PREVENTIVE
-  CORRECTIVE
-}
+
 
 enum InventoryStartType {
   PURCHASE

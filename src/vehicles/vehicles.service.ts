@@ -260,7 +260,7 @@ export class VehiclesService {
                 type: 'MAINTENANCE',
                 logId: log.id,
                 date: log.endDate || log.date,
-                title: 'Mantenimiento ' + (log.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                title: 'Mantenimiento ' + (log.scheduledMaintenanceId ? 'Preventivo' : 'Correctivo'),
                 description: log.description,
                 user: log.user?.name,
                 meta: { 
@@ -268,7 +268,7 @@ export class VehiclesService {
                     status: log.status, 
                     tickets: log.tickets,
                     parts: log.parts,
-                    type: log.type,
+                    type: log.scheduledMaintenanceId ? 'PREVENTIVE' : 'CORRECTIVE',
                     endDate: log.endDate,
                     inactiveDays: log.inactiveDays,
                     inactiveHours: log.inactiveHours
@@ -330,7 +330,7 @@ export class VehiclesService {
                 id: `scheduled-${sched.id}`,
                 type: 'SCHEDULED_MAINTENANCE',
                 date: sched.date,
-                title: 'Programación: ' + (sched.type === 'PREVENTIVE' ? 'Preventivo' : 'Correctivo'),
+                title: 'Programación: Preventivo',
                 description: sched.description,
                 meta: { status: sched.status },
             })),

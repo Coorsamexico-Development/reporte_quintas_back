@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MaintenanceType_OLD, MaintenanceStatus } from '@prisma/client';
+import { MaintenanceStatus } from '@prisma/client';
 
 @Injectable()
 export class ScheduledMaintenanceService {
@@ -11,7 +11,6 @@ export class ScheduledMaintenanceService {
     title: string;
     description?: string;
     date: Date;
-    type?: MaintenanceType_OLD;
     maintenanceTypeId?: number;
     status?: MaintenanceStatus;
   }) {
@@ -27,18 +26,20 @@ export class ScheduledMaintenanceService {
         date: {
           gte: startOfDay,
           lte: endOfDay,
+          },
         },
-      },
-    });
+      });
 
     if (existing) {
       throw new BadRequestException('Esta unidad ya tiene un mantenimiento programado para este día.');
     }
 
+    const { maintenanceTypeId, date, ...rest } = data;
+
     return this.prisma.scheduledMaintenance.create({
       data: {
-        ...data,
-        maintenanceTypeId: data.maintenanceTypeId ? +data.maintenanceTypeId : undefined,
+        ...rest,
+        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
         date: inputDate,
       },
       include: { vehicle: true, maintenanceType: true },
@@ -104,12 +105,14 @@ export class ScheduledMaintenanceService {
       }
     }
 
+    const { type, maintenanceTypeId, date, ...rest } = data;
+
     return this.prisma.scheduledMaintenance.update({
       where: { id },
       data: {
-        ...data,
-        maintenanceTypeId: data.maintenanceTypeId ? +data.maintenanceTypeId : undefined,
-        date: data.date ? new Date(data.date) : undefined,
+        ...rest,
+        maintenanceTypeId: maintenanceTypeId ? +maintenanceTypeId : undefined,
+        date: date ? new Date(date) : undefined,
       },
     });
   }

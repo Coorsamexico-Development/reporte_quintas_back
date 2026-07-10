@@ -167,6 +167,70 @@ export class InventoryService {
         });
     }
 
+    async deactivateMovement(movementId: number, deleteReason: string, userId: number, allowedCedis?: number[]) {
+        if (!deleteReason) {
+            throw new BadRequestException('Se requiere una justificación para eliminar el movimiento');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            const movement = await tx.inventoryMovement.findUnique({
+                where: { id: movementId },
+            });
+
+            if (!movement) {
+                throw new BadRequestException('Movimiento no encontrado');
+            }
+
+            if (!movement.isActive) {
+                throw new BadRequestException('El movimiento ya se encuentra eliminado');
+            }
+
+            if (allowedCedis && allowedCedis.length > 0 && !allowedCedis.map(Number).includes(movement.cedisId)) {
+                throw new ForbiddenException('No tienes acceso a este CEDIS');
+            }
+
+            const isIncreasing = ([
+                InventoryStartType.PURCHASE,
+                InventoryStartType.TRANSFER_IN,
+                InventoryStartType.ADJUSTMENT,
+            ] as InventoryStartType[]).includes(movement.type);
+
+            const deltaQuantity = isIncreasing ? -movement.quantity : movement.quantity;
+
+            const updatedMovement = await tx.inventoryMovement.update({
+                where: { id: movementId },
+                data: {
+                    isActive: false,
+                    deleteReason,
+                    deletedBy: userId,
+                },
+            });
+
+            const stock = await tx.inventoryStock.upsert({
+                where: {
+                    cedisId_productId: {
+                        cedisId: movement.cedisId,
+                        productId: movement.productId,
+                    },
+                },
+                update: {
+                    quantity: { increment: deltaQuantity },
+                },
+                create: {
+                    cedisId: movement.cedisId,
+                    productId: movement.productId,
+                    quantity: deltaQuantity < 0 ? 0 : deltaQuantity,
+                },
+            });
+
+            if (stock.quantity < 0) {
+                throw new BadRequestException('No se puede eliminar este movimiento porque causaría un stock negativo en el inventario');
+            }
+
+            return { movement: updatedMovement, stock };
+        });
+    }
+
     async getMovements(cedisId?: number, productId?: number, allowedCedis?: number[]) {
         let whereCedis: any = undefined;
         if (allowedCedis && allowedCedis.length > 0) {

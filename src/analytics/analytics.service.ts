@@ -33,7 +33,7 @@ export class AnalyticsService {
             const date = new Date(m.date);
             const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             const cedisName = m.vehicle?.currentCedis?.name || 'CEDIS Desconocido';
-            const type = m.type;
+            const type = m.scheduledMaintenanceId ? 'PREVENTIVE' : 'CORRECTIVE';
 
             let totalCost = 0;
             // Sumar tickets e items
@@ -217,7 +217,7 @@ export class AnalyticsService {
 
             const mKey = new Date(m.date).toISOString().slice(0, 7);
             if (!monthlyExpenses[mKey]) monthlyExpenses[mKey] = { preventive: 0, corrective: 0, preventiveCount: 0, correctiveCount: 0 };
-            if (m.type === 'PREVENTIVE') {
+            if (m.scheduledMaintenanceId) {
                 monthlyExpenses[mKey].preventive += mTotal;
                 monthlyExpenses[mKey].preventiveCount++;
             } else {

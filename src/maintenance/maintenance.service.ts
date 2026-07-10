@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MaintenanceType_OLD, MaintenanceStatus } from '@prisma/client';
+import { MaintenanceStatus } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 
 @Injectable()
@@ -69,7 +69,6 @@ export class MaintenanceService {
                         vehicleId: vehicleId,
                         userId: userId ? Number(userId) : null,
                         providerId: providerId ? Number(providerId) : null,
-                        type: logData.type || 'PREVENTIVE',
                         description: logData.description || '',
                         date: startDate,
                         endDate: endDate,

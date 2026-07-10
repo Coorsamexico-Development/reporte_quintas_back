@@ -53,6 +53,16 @@ export class InventoryController {
         }, req.user?.allowedCedis);
     }
 
+    @Post('movement/:id/deactivate')
+    deactivateMovement(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: { deleteReason: string },
+        @Req() req: any
+    ) {
+        const userId = req.user.userId;
+        return this.inventoryService.deactivateMovement(id, body.deleteReason, userId, req.user?.allowedCedis);
+    }
+
     @Get('movements')
     getMovements(
         @Req() req: any,
