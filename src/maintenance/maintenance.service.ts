@@ -351,7 +351,7 @@ export class MaintenanceService {
             orderBy: { date: 'desc' },
         });
 
-        // Sign URLs
+        // Sign URLs and add type property
         return Promise.all(logs.map(async (log) => {
             if (log.evidence) {
                 log.evidence = await Promise.all(
@@ -361,7 +361,10 @@ export class MaintenanceService {
                     }))
                 );
             }
-            return log;
+            return {
+                ...log,
+                type: log.scheduledMaintenanceId ? 'PREVENTIVE' : 'CORRECTIVE'
+            };
         }));
     }
 

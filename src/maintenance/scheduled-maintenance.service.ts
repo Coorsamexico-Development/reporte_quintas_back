@@ -47,7 +47,7 @@ export class ScheduledMaintenanceService {
   }
 
   async findAll(status?: MaintenanceStatus, vehicleId?: number, allowedCedis?: number[]) {
-    return this.prisma.scheduledMaintenance.findMany({
+    const events = await this.prisma.scheduledMaintenance.findMany({
       where: {
         status: status || undefined,
         vehicleId: vehicleId ? +vehicleId : undefined,
@@ -62,16 +62,19 @@ export class ScheduledMaintenanceService {
       },
       orderBy: { date: 'asc' },
     });
+    return events.map(event => ({ ...event, type: 'PREVENTIVE' }));
   }
 
   async findOne(id: number) {
-    return this.prisma.scheduledMaintenance.findUnique({
+    const event = await this.prisma.scheduledMaintenance.findUnique({
       where: { id },
       include: {
         vehicle: true,
         maintenances: true,
       },
     });
+    if (!event) return null;
+    return { ...event, type: 'PREVENTIVE' };
   }
 
   async update(id: number, data: any) {
@@ -126,7 +129,7 @@ export class ScheduledMaintenanceService {
 
   async getAlerts(allowedCedis?: number[]) {
     // Alertas son los pendientes o vencidos (fecha <= hoy + 7 días por ejemplo, o simplemente PENDING)
-    return this.prisma.scheduledMaintenance.findMany({
+    const alerts = await this.prisma.scheduledMaintenance.findMany({
       where: {
         status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         isActive: true,
@@ -140,5 +143,6 @@ export class ScheduledMaintenanceService {
       },
       orderBy: { date: 'asc' },
     });
+    return alerts.map(alert => ({ ...alert, type: 'PREVENTIVE' }));
   }
 }
