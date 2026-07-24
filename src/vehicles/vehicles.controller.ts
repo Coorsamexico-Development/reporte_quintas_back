@@ -24,6 +24,12 @@ export class VehiclesController {
         return this.vehiclesService.findOne(id, req.user?.allowedCedis);
     }
 
+    @Get('history/all')
+    @RequirePermissions('vehicles:read')
+    async getAllHistory(@Request() req) {
+        return this.vehiclesService.getAllVehiclesHistory(req.user?.allowedCedis);
+    }
+
     @Get(':id/history')
     @RequirePermissions('vehicles:read')
     async getHistory(@Param('id', ParseIntPipe) id: number, @Request() req) {

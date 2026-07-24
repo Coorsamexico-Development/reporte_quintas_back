@@ -44,6 +44,14 @@ export class MaintenanceController {
         return this.maintenanceService.getLogs(vehicleId, providerId, req?.user?.allowedCedis);
     }
 
+    @Get('search-ticket')
+    searchByTicket(
+        @Query('ticketNumber') ticketNumber: string,
+        @Req() req?: any
+    ) {
+        return this.maintenanceService.searchLogsByTicket(ticketNumber, req?.user?.allowedCedis);
+    }
+
     @Post('tire-rotation')
     @Roles('ADMIN')
     recordTireRotation(

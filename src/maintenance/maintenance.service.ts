@@ -368,6 +368,67 @@ export class MaintenanceService {
         }));
     }
 
+    async searchLogsByTicket(ticketNumber: string, allowedCedis?: number[]) {
+        if (!ticketNumber || !ticketNumber.trim()) {
+            return [];
+        }
+        const query = ticketNumber.trim();
+
+        const logs = await this.prisma.maintenance.findMany({
+            where: {
+                isActive: true,
+                tickets: {
+                    some: {
+                        ticketNumber: {
+                            contains: query
+                        }
+                    }
+                },
+                vehicle: (allowedCedis && allowedCedis.length > 0) ? {
+                    currentCedisId: { in: allowedCedis.map(Number) }
+                } : undefined
+            },
+            include: {
+                vehicle: {
+                    include: { currentCedis: true }
+                },
+                provider: true,
+                user: true,
+                evidence: true,
+                maintenanceType: true,
+                tickets: {
+                    include: {
+                        items: {
+                            include: {
+                                product: true,
+                                maintenanceType: true
+                            }
+                        }
+                    }
+                },
+                parts: {
+                    include: { product: true }
+                }
+            },
+            orderBy: { date: 'desc' }
+        });
+
+        return Promise.all(logs.map(async (log) => {
+            if (log.evidence) {
+                log.evidence = await Promise.all(
+                    log.evidence.map(async (e) => ({
+                        ...e,
+                        url: await this.storage.getViewUrl(e.url)
+                    }))
+                );
+            }
+            return {
+                ...log,
+                type: log.scheduledMaintenanceId ? 'PREVENTIVE' : 'CORRECTIVE'
+            };
+        }));
+    }
+
     async deletePartExchange(id: number) {
         return this.prisma.partExchange.update({
             where: { id },

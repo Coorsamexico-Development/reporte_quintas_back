@@ -360,6 +360,108 @@ export class VehiclesService {
         return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 
+    async getAllVehiclesHistory(allowedCedis?: number[]) {
+        const whereClause: any = {};
+        if (allowedCedis && allowedCedis.length > 0) {
+            whereClause.currentCedisId = { in: allowedCedis.map(Number) };
+        }
+        const vehicles = await this.prisma.vehicle.findMany({
+            where: whereClause,
+            include: {
+                currentCedis: true,
+                maintenanceLogs: {
+                    where: { isActive: true },
+                    include: { 
+                        provider: true, 
+                        user: true, 
+                        evidence: true, 
+                        tickets: { include: { items: true } },
+                        parts: { include: { product: true } }
+                    },
+                    orderBy: { date: 'desc' }
+                },
+                partExchanges: {
+                    where: { isActive: true },
+                    include: { product: true, evidence: true, user: true },
+                    orderBy: { date: 'desc' }
+                },
+                scheduledMaintenances: {
+                    where: { isActive: true },
+                    orderBy: { date: 'desc' }
+                }
+            }
+        });
+
+        const allEvents: any[] = [];
+
+        for (const vehicle of vehicles) {
+            const vInfo = {
+                id: vehicle.id,
+                truckNumber: vehicle.truckNumber,
+                plate: vehicle.plate,
+                location: vehicle.currentCedis?.name || 'Sin CEDIS',
+                currentCedisId: vehicle.currentCedisId
+            };
+
+            const rawEvents: any[] = [
+                ...vehicle.maintenanceLogs.map(log => ({
+                    id: `maintenance-${log.id}`,
+                    type: 'MAINTENANCE',
+                    logId: log.id,
+                    date: log.endDate || log.date,
+                    title: 'Mantenimiento ' + (log.scheduledMaintenanceId ? 'Preventivo' : 'Correctivo'),
+                    description: log.description,
+                    user: log.user?.name,
+                    vehicle: vInfo,
+                    meta: { 
+                        provider: log.provider,
+                        status: log.status, 
+                        tickets: log.tickets,
+                        parts: log.parts,
+                        type: log.scheduledMaintenanceId ? 'PREVENTIVE' : 'CORRECTIVE',
+                        endDate: log.endDate,
+                        inactiveDays: log.inactiveDays,
+                        inactiveHours: log.inactiveHours
+                    },
+                    evidence: log.evidence.map(e => e.url)
+                })),
+                ...vehicle.partExchanges.map(ex => {
+                    const actionLabel = ex.action === 'REMOVED' || ex.action === 'RETIRO' ? 'Retiro' : 'Instalación';
+                    return {
+                        id: `exchange-${ex.id}`,
+                        type: 'PART_EXCHANGE',
+                        date: ex.date,
+                        title: `Canibalización: ${actionLabel} de ${ex.product.name}`,
+                        description: ex.description,
+                        user: ex.user?.name,
+                        vehicle: vInfo,
+                        meta: { 
+                            product: ex.product.name, 
+                            productCode: ex.product.code, 
+                            action: ex.action,
+                            cost: ex.cost ? Number(ex.cost) : 0
+                        },
+                        evidence: ex.evidence?.map(e => e.url) || []
+                    };
+                }),
+                ...vehicle.scheduledMaintenances.map(sched => ({
+                    id: `scheduled-${sched.id}`,
+                    type: 'SCHEDULED_MAINTENANCE',
+                    date: sched.date,
+                    title: 'Programación: Preventivo',
+                    description: sched.description,
+                    vehicle: vInfo,
+                    meta: { status: sched.status },
+                }))
+            ];
+
+            allEvents.push(...rawEvents);
+        }
+
+        return allEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+
     async checkEventAssociation(type: string, id: number) {
         const cleanType = type.toUpperCase();
         if (cleanType === 'FAULT') {
