@@ -85,4 +85,30 @@ export class CatalogsController {
     deleteMaintenanceType(@Param('id', ParseIntPipe) id: number) {
         return this.catalogsService.deleteMaintenanceType(id);
     }
+
+    // Inventory Movement Categories (solo lectura: son la estructura Ingresos/Salidas)
+    @Get('inventory-movement-categories')
+    @RequirePermissions('catalogs:read')
+    findAllInventoryMovementCategories() {
+        return this.catalogsService.findAllInventoryMovementCategories();
+    }
+
+    // Inventory Movement Types
+    @Get('inventory-movement-types')
+    @RequirePermissions('catalogs:read')
+    findAllInventoryMovementTypes() {
+        return this.catalogsService.findAllInventoryMovementTypes();
+    }
+
+    @Post('inventory-movement-types')
+    @RequirePermissions('catalogs:create')
+    createInventoryMovementType(@Body() body: { name: string; label: string; categoryId: number; isWriteOff?: boolean; sortOrder?: number }) {
+        return this.catalogsService.createInventoryMovementType(body);
+    }
+
+    @Delete('inventory-movement-types/:id')
+    @RequirePermissions('catalogs:delete')
+    deleteInventoryMovementType(@Param('id', ParseIntPipe) id: number) {
+        return this.catalogsService.deleteInventoryMovementType(id);
+    }
 }

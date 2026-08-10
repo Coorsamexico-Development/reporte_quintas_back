@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Query, ParseIntPipe, UseInterceptors, UploadedFiles, Req, Param, ForbiddenException } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { InventoryService } from './inventory.service';
-import { InventoryStartType } from '@prisma/client';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -29,7 +28,7 @@ export class InventoryController {
         const data = {
             cedisId: Number(body.cedisId),
             productId: Number(body.productId),
-            type: body.type as InventoryStartType,
+            movementTypeId: Number(body.movementTypeId),
             quantity: Number(body.quantity),
             unitPrice: body.unitPrice ? Number(body.unitPrice) : undefined,
             userId: body.userId ? Number(body.userId) : undefined,

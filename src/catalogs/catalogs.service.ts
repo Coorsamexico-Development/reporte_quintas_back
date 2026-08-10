@@ -130,4 +130,48 @@ export class CatalogsService {
       where: { id }
     });
   }
+
+  // Inventory Movement Categories
+  async findAllInventoryMovementCategories() {
+    return this.prisma.inventoryMovementCategory.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  // Inventory Movement Types
+  async findAllInventoryMovementTypes() {
+    return this.prisma.inventoryMovementType.findMany({
+      where: { isActive: true },
+      include: { category: true },
+      orderBy: [{ category: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+    });
+  }
+
+  async createInventoryMovementType(data: { name: string; label: string; categoryId: number; isWriteOff?: boolean; sortOrder?: number }) {
+    return this.prisma.inventoryMovementType.create({
+      data: {
+        name: data.name,
+        label: data.label,
+        categoryId: data.categoryId,
+        isWriteOff: data.isWriteOff ?? false,
+        sortOrder: data.sortOrder ?? 0,
+      },
+      include: { category: true },
+    });
+  }
+
+  async deleteInventoryMovementType(id: number) {
+    const type = await this.prisma.inventoryMovementType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundException('El tipo de movimiento no existe');
+
+    const movementCount = await this.prisma.inventoryMovement.count({ where: { movementTypeId: id } });
+    if (movementCount > 0) {
+      throw new BadRequestException(`No se puede eliminar "${type.label}" porque tiene ${movementCount} movimientos registrados.`);
+    }
+
+    return this.prisma.inventoryMovementType.delete({
+      where: { id }
+    });
+  }
 }

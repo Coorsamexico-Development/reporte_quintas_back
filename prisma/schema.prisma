@@ -328,18 +328,19 @@ model InventoryStock {
 }
 
 model InventoryMovement {
-  id        Int                         @id @default(autoincrement())
-  cedisId   Int
-  productId Int
-  type      InventoryStartType
-  quantity  Int
-  unitPrice Decimal?
-  totalCost Decimal?
-  date      DateTime                    @default(now())
-  userId    Int?
-  notes     String?                     @db.Text
-  cedis     Cedis                       @relation(fields: [cedisId], references: [id])
-  product   Product                     @relation(fields: [productId], references: [id])
+  id             Int                         @id @default(autoincrement())
+  cedisId        Int
+  productId      Int
+  movementTypeId Int
+  quantity       Int
+  unitPrice      Decimal?
+  totalCost      Decimal?
+  date           DateTime                    @default(now())
+  userId         Int?
+  notes          String?                     @db.Text
+  cedis          Cedis                       @relation(fields: [cedisId], references: [id])
+  product        Product                     @relation(fields: [productId], references: [id])
+  movementType   InventoryMovementType       @relation(fields: [movementTypeId], references: [id])
   user        User?                       @relation(fields: [userId], references: [id])
   evidence    InventoryMovementEvidence[]
   adjustments InventoryMovementAdjustment[]
@@ -351,8 +352,39 @@ model InventoryMovement {
 
   @@index([cedisId], map: "InventoryMovement_cedisId_fkey")
   @@index([productId], map: "InventoryMovement_productId_fkey")
+  @@index([movementTypeId], map: "InventoryMovement_movementTypeId_fkey")
   @@index([userId], map: "InventoryMovement_userId_fkey")
   @@index([deletedBy], map: "InventoryMovement_deletedBy_fkey")
+}
+
+// Catalogo relacional de tipos de movimiento de inventario (reemplaza el
+// enum InventoryStartType). Agrupados por categoria (Ingresos/Salidas), cada
+// categoria define el signo (+1/-1) que antes estaba hardcodeado en el
+// backend. isWriteOff marca los tipos que representan una baja "problema"
+// (extravio, rotura) para poder distinguirlos visualmente sin comparar
+// strings de tipo en el frontend.
+model InventoryMovementCategory {
+  id        Int                     @id @default(autoincrement())
+  name      String                  @unique
+  label     String
+  sign      Int
+  isActive  Boolean                 @default(true)
+  sortOrder Int                     @default(0)
+  types     InventoryMovementType[]
+}
+
+model InventoryMovementType {
+  id         Int                        @id @default(autoincrement())
+  name       String                     @unique
+  label      String
+  categoryId Int
+  category   InventoryMovementCategory  @relation(fields: [categoryId], references: [id])
+  isWriteOff Boolean                    @default(false)
+  isActive   Boolean                    @default(true)
+  sortOrder  Int                        @default(0)
+  movements  InventoryMovement[]
+
+  @@index([categoryId], map: "InventoryMovementType_categoryId_fkey")
 }
 
 model InventoryMovementEvidence {
@@ -465,17 +497,6 @@ model MaintenanceType {
   maintenances          Maintenance[]
   scheduledMaintenances ScheduledMaintenance[]
   ticketItems           MaintenanceTicketItem[]
-}
-
-
-
-enum InventoryStartType {
-  PURCHASE
-  TRANSFER_IN
-  TRANSFER_OUT
-  USAGE
-  LOSS
-  ADJUSTMENT
 }
 
 model Role {

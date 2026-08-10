@@ -1,6 +1,5 @@
 import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { InventoryStartType } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 
 @Injectable()
@@ -13,19 +12,23 @@ export class InventoryService {
     async recordMovement(data: {
         cedisId: number;
         productId: number;
-        type: InventoryStartType;
+        movementTypeId: number;
         quantity: number;
         unitPrice?: number;
         userId?: number;
         notes?: string;
     }, files?: Express.Multer.File[]) {
-        // Determine sign based on type
-        const isIncreasing = ([
-            InventoryStartType.PURCHASE,
-            InventoryStartType.TRANSFER_IN,
-            InventoryStartType.ADJUSTMENT,
-        ] as InventoryStartType[]).includes(data.type);
+        // El signo (entrada/salida) lo define la categoria del tipo elegido,
+        // no un listado hardcodeado de tipos.
+        const movementType = await this.prisma.inventoryMovementType.findUnique({
+            where: { id: data.movementTypeId },
+            include: { category: true },
+        });
+        if (!movementType) {
+            throw new BadRequestException('Tipo de movimiento inválido');
+        }
 
+        const isIncreasing = movementType.category.sign > 0;
         const quantityChange = isIncreasing ? data.quantity : -data.quantity;
 
         return this.prisma.$transaction(async (tx) => {
@@ -34,7 +37,7 @@ export class InventoryService {
                 data: {
                     cedisId: data.cedisId,
                     productId: data.productId,
-                    type: data.type,
+                    movementTypeId: data.movementTypeId,
                     quantity: data.quantity,
                     unitPrice: data.unitPrice,
                     totalCost: data.unitPrice ? data.unitPrice * data.quantity : null,
@@ -98,6 +101,7 @@ export class InventoryService {
         return this.prisma.$transaction(async (tx) => {
             const movement = await tx.inventoryMovement.findUnique({
                 where: { id: movementId },
+                include: { movementType: { include: { category: true } } },
             });
 
             if (!movement) {
@@ -112,13 +116,7 @@ export class InventoryService {
             const oldUnitPrice = movement.unitPrice ? Number(movement.unitPrice) : null;
             const newUnitPrice = data.newUnitPrice !== undefined ? data.newUnitPrice : oldUnitPrice;
 
-            const isIncreasing = ([
-                InventoryStartType.PURCHASE,
-                InventoryStartType.TRANSFER_IN,
-                InventoryStartType.ADJUSTMENT,
-            ] as InventoryStartType[]).includes(movement.type);
-
-            const sign = isIncreasing ? 1 : -1;
+            const sign = movement.movementType.category.sign > 0 ? 1 : -1;
             const deltaQuantity = (data.newQuantity - oldQuantity) * sign;
 
             const adjustment = await tx.inventoryMovementAdjustment.create({
@@ -175,6 +173,7 @@ export class InventoryService {
         return this.prisma.$transaction(async (tx) => {
             const movement = await tx.inventoryMovement.findUnique({
                 where: { id: movementId },
+                include: { movementType: { include: { category: true } } },
             });
 
             if (!movement) {
@@ -189,12 +188,7 @@ export class InventoryService {
                 throw new ForbiddenException('No tienes acceso a este CEDIS');
             }
 
-            const isIncreasing = ([
-                InventoryStartType.PURCHASE,
-                InventoryStartType.TRANSFER_IN,
-                InventoryStartType.ADJUSTMENT,
-            ] as InventoryStartType[]).includes(movement.type);
-
+            const isIncreasing = movement.movementType.category.sign > 0;
             const deltaQuantity = isIncreasing ? -movement.quantity : movement.quantity;
 
             const updatedMovement = await tx.inventoryMovement.update({
@@ -257,6 +251,7 @@ export class InventoryService {
                 cedis: true,
                 user: true,
                 evidence: true,
+                movementType: { include: { category: true } },
                 adjustments: {
                     include: {
                         user: true,
