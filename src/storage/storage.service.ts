@@ -68,10 +68,40 @@ export class StorageService {
     }
 
     async getViewUrl(url: string | null): Promise<string> {
-        // El bucket es de lectura pública, así que la URL directa de GCS ya es accesible.
-        // Firmar aquí generaba URLs que expiraban a los 15 min y se cacheaban en el
-        // frontend sin refresco, rompiendo las evidencias tras un rato de sesión abierta.
-        return url || '';
+        if (!url) return '';
+
+        // El bucket es privado. Cada lectura de evidencia pasa por aquí, así que
+        // firmamos bajo demanda en vez de guardar/cachear la URL firmada: nunca
+        // se sirve una URL ya vencida porque se genera fresca en cada respuesta.
+        if (!this.gcsStorage || !this.bucketName || !url.includes('storage.googleapis.com')) {
+            return url;
+        }
+
+        try {
+            const urlParts = url.split(`${this.bucketName}/`);
+            if (urlParts.length < 2) return url;
+
+            let filePath = urlParts[1].split('?')[0];
+            try {
+                filePath = decodeURIComponent(filePath);
+            } catch {
+                // filePath ya estaba decodificado
+            }
+
+            const [signedUrl] = await this.gcsStorage
+                .bucket(this.bucketName)
+                .file(filePath)
+                .getSignedUrl({
+                    version: 'v4',
+                    action: 'read',
+                    expires: Date.now() + 60 * 60 * 1000, // 1 hora
+                });
+
+            return signedUrl;
+        } catch (error) {
+            console.error('Error signing GCS URL:', error);
+            return url;
+        }
     }
 
     async deleteFile(url: string): Promise<void> {
