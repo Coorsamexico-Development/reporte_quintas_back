@@ -68,11 +68,16 @@ export class StorageService {
     }
 
     async getViewUrl(url: string | null): Promise<string> {
+        // El bucket es privado, asi que esta URL cruda no es directamente accesible.
+        // Se usa solo como identificador en listados; la firma real se pide bajo
+        // demanda via signUrl() justo cuando el usuario abre el visor, para que
+        // nunca quede una URL firmada cacheada en el frontend que pueda vencer.
+        return url || '';
+    }
+
+    async signUrl(url: string | null): Promise<string> {
         if (!url) return '';
 
-        // El bucket es privado. Cada lectura de evidencia pasa por aquí, así que
-        // firmamos bajo demanda en vez de guardar/cachear la URL firmada: nunca
-        // se sirve una URL ya vencida porque se genera fresca en cada respuesta.
         if (!this.gcsStorage || !this.bucketName || !url.includes('storage.googleapis.com')) {
             return url;
         }
@@ -94,7 +99,7 @@ export class StorageService {
                 .getSignedUrl({
                     version: 'v4',
                     action: 'read',
-                    expires: Date.now() + 60 * 60 * 1000, // 1 hora
+                    expires: Date.now() + 15 * 60 * 1000, // 15 min, se pide fresca al abrir el visor
                 });
 
             return signedUrl;

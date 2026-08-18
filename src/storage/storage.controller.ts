@@ -1,4 +1,4 @@
-import { Controller, Post, UseInterceptors, UploadedFiles, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Query, BadRequestException, UseInterceptors, UploadedFiles, UseGuards } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { StorageService } from './storage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,5 +15,14 @@ export class StorageController {
             files.map(file => this.storageService.uploadFile(file, 'maintenance'))
         );
         return { urls };
+    }
+
+    @Get('sign-url')
+    async signUrl(@Query('url') url: string) {
+        if (!url) {
+            throw new BadRequestException('url es requerido');
+        }
+        const signedUrl = await this.storageService.signUrl(url);
+        return { url: signedUrl };
     }
 }

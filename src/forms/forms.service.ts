@@ -833,7 +833,7 @@ export class FormsService {
   }
 
   async getInspectionPdfViewUrl(pdfUrl: string): Promise<string> {
-    return this.storageService.getViewUrl(pdfUrl);
+    return this.storageService.signUrl(pdfUrl);
   }
 
   async deleteInspection(responseId: number) {
