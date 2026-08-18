@@ -68,45 +68,10 @@ export class StorageService {
     }
 
     async getViewUrl(url: string | null): Promise<string> {
-        if (!url) return '';
-        
-        const isGcsUrl = url.includes('storage.googleapis.com') || url.includes('storage.cloud.google.com');
-        
-        if (this.gcsStorage && this.bucketName && isGcsUrl) {
-            try {
-                // Extraer el path del archivo manejando diferentes formatos de URL de Google
-                let filePath = '';
-                if (url.includes(`${this.bucketName}/`)) {
-                    filePath = url.split(`${this.bucketName}/`)[1].split('?')[0];
-                }
-
-                if (filePath) {
-                    // Decodificar completamente el filePath (ej. %252C -> %2C -> ,)
-                    let decodedPath = filePath;
-                    try {
-                        decodedPath = decodeURIComponent(filePath);
-                        if (decodedPath.includes('%')) {
-                            decodedPath = decodeURIComponent(decodedPath);
-                        }
-                    } catch (err) {
-                        console.error('Error decoding GCS filePath:', err);
-                    }
-
-                    const [signedUrl] = await this.gcsStorage
-                        .bucket(this.bucketName)
-                        .file(decodedPath)
-                        .getSignedUrl({
-                            version: 'v4',
-                            action: 'read',
-                            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-                        });
-                    return signedUrl;
-                }
-            } catch (e) {
-                console.error(`❌ Error signing GCS URL for ${url}:`, e.message || e);
-            }
-        }
-        return url;
+        // El bucket es de lectura pública, así que la URL directa de GCS ya es accesible.
+        // Firmar aquí generaba URLs que expiraban a los 15 min y se cacheaban en el
+        // frontend sin refresco, rompiendo las evidencias tras un rato de sesión abierta.
+        return url || '';
     }
 
     async deleteFile(url: string): Promise<void> {
